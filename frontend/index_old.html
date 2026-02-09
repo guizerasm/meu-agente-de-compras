@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🛒 Agente de Compras - IA</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #0f766e;
+      --primary-dark: #0d5d56;
+      --primary-light: #1a9d94;
+      --secondary: #f97316;
+      --accent: #06b6d4;
+      --bg-dark: #0f172a;
+      --bg-light: #f8fafc;
+      --border-light: #e2e8f0;
+      --text-primary: #1e293b;
+      --text-secondary: #64748b;
+      --success: #22c55e;
+      --warning: #eab308;
+      --error: #ef4444;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, var(--bg-light) 0%, #f1f5f9 100%);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100vh;
+      background: white;
+    }
+
+    /* Header */
+    header {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: white;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 4px 12px rgba(15, 118, 110, 0.15);
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-left h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .status-badge {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-badge.ready {
+      background: rgba(34, 197, 94, 0.3);
+      color: #22c55e;
+    }
+
+    .status-badge.loading {
+      background: rgba(249, 115, 22, 0.3);
+      color: #f97316;
+    }
+
+    /* Main Chat Area */
+    .chat-wrapper {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      gap: 16px;
+      padding: 16px;
+      overflow: hidden;
+    }
+
+    .chat-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-light);
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      overflow: hidden;
+    }
+
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-light) transparent;
+    }
+
+    #chat::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    #chat::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    #chat::-webkit-scrollbar-thumb {
+      background: var(--border-light);
+      border-radius: 3px;
+    }
+
+    .msg-wrapper {
+      display: flex;
+      gap: 8px;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .msg-wrapper.user {
+      justify-content: flex-end;
+    }
+
+    .msg {
+      max-width: 70%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      line-height: 1.5;
+      word-wrap: break-word;
+      font-size: 14px;
+    }
+
+    .msg.bot {
+      background: white;
+      border: 1px solid var(--border-light);
+      color: var(--text-primary);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .msg.user {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: white;
+      box-shadow: 0 2px 8px rgba(15, 118, 110, 0.2);
+    }
+
+    .msg-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .msg-wrapper.bot .msg-avatar {
+      background: var(--primary);
+      color: white;
+    }
+
+    .msg-wrapper.user .msg-avatar {
+      background: var(--secondary);
+      color: white;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 320px;
+      background: white;
+      border-left: 1px solid var(--border-light);
+      display: flex;
+      flex-direction: column;
+      box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .sidebar-title {
+      padding: 16px;
+      border-bottom: 1px solid var(--border-light);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    #lista {
+      display: none;
+    }
+
+    #lista.visible {
+      display: block;
+    }
+
+    .lista-item {
+      background: var(--bg-light);
+      padding: 12px;
+      margin-bottom: 12px;
+      border-radius: 8px;
+      border-left: 3px solid var(--primary);
+      font-size: 13px;
+    }
+
+    .lista-item strong {
+      color: var(--text-primary);
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .lista-item small {
+      color: var(--text-secondary);
+    }
+
+    /* Footer/Input */
+    footer {
+      padding: 16px;
+      background: white;
+      border-top: 1px solid var(--border-light);
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+    }
+
+    .input-group {
+      flex: 1;
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    textarea {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 14px;
+      resize: none;
+      max-height: 100px;
+      transition: all 0.2s ease;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+    }
+
+    textarea::placeholder {
+      color: var(--text-secondary);
+    }
+
+    button {
+      padding: 10px 16px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(15, 118, 110, 0.2);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      background: #cbd5e1;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    button.secondary {
+      background: var(--text-secondary);
+    }
+
+    button.secondary:hover {
+      background: var(--text-primary);
+    }
+
+    button.success {
+      background: linear-gradient(135deg, var(--success) 0%, #16a34a 100%);
+    }
+
+    button.danger {
+      background: linear-gradient(135deg, var(--error) 0%, #dc2626 100%);
+    }
+
+    .button-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    /* Loading */
+    .typing-indicator {
+      display: flex;
+      gap: 4px;
+      padding: 12px 16px;
+    }
+
+    .typing-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-secondary);
+      animation: typing 1.4s infinite;
+    }
+
+    .typing-dot:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .typing-dot:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes typing {
+      0%, 60%, 100% {
+        opacity: 0.5;
+        transform: translateY(0);
+      }
+      30% {
+        opacity: 1;
+        transform: translateY(-10px);
+      }
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .chat-wrapper {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        width: 100%;
+        max-height: 200px;
+        border-left: none;
+        border-top: 1px solid var(--border-light);
+      }
+
+      .msg {
+        max-width: 85%;
+      }
+
+      header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="header-left">
+      <h1>🛒 Agente de Compras</h1>
+      <span class="status-badge" id="status">Pronto</span>
+    </div>
+  </header>
+
+  <div class="chat-wrapper">
+    <div class="chat-main">
+      <div id="chat"></div>
+    </div>
+
+    <div class="sidebar">
+      <div class="sidebar-title">📋 Lista de Compras</div>
+      <div class="sidebar-content">
+        <div id="lista"></div>
+        <div id="empty-state" style="text-align: center; color: var(--text-secondary); padding: 20px; font-size: 14px;">
+          A lista aparecerá aqui quando estiver pronta
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="button-group">
+      <button id="pdfBtn" class="secondary" title="Enviar PDF">📄 PDF</button>
+      <input type="file" id="pdf" accept="application/pdf" />
+    </div>
+
+    <div class="input-group">
+      <textarea id="input" rows="1" placeholder="Digite sua dieta, PDF ou responda aqui..."></textarea>
+      <button id="send" title="Enviar mensagem">▶</button>
+    </div>
+
+    <button id="finalizar" class="success" disabled title="Finalizar e gerar lista">✓ Finalizar</button>
+  </footer>
+</div>
+
+<script>
+  const chat = document.getElementById("chat");
+  const input = document.getElementById("input");
+  const sendBtn = document.getElementById("send");
+  const pdfInput = document.getElementById("pdf");
+  const pdfBtn = document.getElementById("pdfBtn");
+  const finalizarBtn = document.getElementById("finalizar");
+  const listaDiv = document.getElementById("lista");
+  const statusBadge = document.getElementById("status");
+  const emptyState = document.querySelector("#lista + #empty-state");
+
+  const API_URL = "http://127.0.0.1:8000";
+
+  let dieta = null;
+  let historico = [];
+  let listaFinal = null;
+  let fase = "inicial"; // inicial | conversando | pronto
+
+  function setStatus(text, type = "default") {
+    statusBadge.textContent = text;
+    statusBadge.className = `status-badge ${type}`;
+  }
+
+  function addMessage(text, isUser = false, isTyping = false) {
+    const wrapper = document.createElement("div");
+    wrapper.className = `msg-wrapper ${isUser ? "user" : "bot"}`;
+
+    if (!isUser) {
+      const avatar = document.createElement("div");
+      avatar.className = "msg-avatar";
+      avatar.textContent = "🤖";
+      wrapper.appendChild(avatar);
+    }
+
+    if (isTyping) {
+      const typingDiv = document.createElement("div");
+      typingDiv.className = "typing-indicator";
+      typingDiv.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+      wrapper.appendChild(typingDiv);
+    } else {
+      const msgDiv = document.createElement("div");
+      msgDiv.className = "msg bot";
+      msgDiv.textContent = text;
+      wrapper.appendChild(msgDiv);
+    }
+
+    if (isUser) {
+      const avatar = document.createElement("div");
+      avatar.className = "msg-avatar";
+      avatar.textContent = "👤";
+      wrapper.appendChild(avatar);
+    }
+
+    chat.appendChild(wrapper);
+    chat.scrollTop = chat.scrollHeight;
+    return wrapper;
+  }
+
+  function showUserMessage(text) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "msg-wrapper user";
+
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg user";
+    msgDiv.textContent = text;
+    wrapper.appendChild(msgDiv);
+
+    const avatar = document.createElement("div");
+    avatar.className = "msg-avatar";
+    avatar.textContent = "👤";
+    wrapper.appendChild(avatar);
+
+    chat.appendChild(wrapper);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  async function enviarDietaInicial() {
+    const form = new FormData();
+    let origem = "";
+
+    if (pdfInput.files.length > 0) {
+      form.append("file", pdfInput.files[0]);
+      origem = "PDF";
+      showUserMessage(`📄 Arquivo: ${pdfInput.files[0].name}`);
+    } else if (input.value.trim()) {
+      form.append("texto", input.value.trim());
+      origem = "Texto";
+      showUserMessage(input.value.trim());
+    } else {
+      return;
+    }
+
+    input.value = "";
+    pdfInput.value = "";
+
+    setStatus("Processando...", "loading");
+    const typingMsg = addMessage("", false, true);
+
+    try {
+      const res = await fetch(`${API_URL}/dieta`, {
+        method: "POST",
+        body: form
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      dieta = data.dieta;
+      historico = [];
+
+      typingMsg.remove();
+
+      if (data.escolhas_pendentes) {
+        fase = "conversando";
+        setStatus("Conversando", "loading");
+        addMessage(data.mensagem);
+      } else {
+        fase = "pronto";
+        setStatus("Pronto!", "ready");
+        addMessage(data.mensagem);
+        finalizarBtn.disabled = false;
+      }
+    } catch (erro) {
+      typingMsg.remove();
+      addMessage(`❌ Erro: ${erro.message}`);
+      setStatus("Erro", "default");
+      console.error(erro);
+    }
+  }
+
+  async function enviarMensagemChat() {
+    const texto = input.value.trim();
+    if (!texto) return;
+
+    showUserMessage(texto);
+    input.value = "";
+
+    setStatus("Processando...", "loading");
+    const typingMsg = addMessage("", false, true);
+
+    try {
+      const res = await fetch(`${API_URL}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dieta,
+          historico,
+          mensagem_usuario: texto
+        })
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      historico = data.historico;
+
+      typingMsg.remove();
+      addMessage(data.resposta);
+
+      // Verificar se está pronto
+      await verificarProntidao();
+    } catch (erro) {
+      typingMsg.remove();
+      addMessage(`❌ Erro: ${erro.message}`);
+      console.error(erro);
+    }
+  }
+
+  async function verificarProntidao() {
+    try {
+      const res = await fetch(`${API_URL}/verificar-prontidao`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dieta })
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+
+      if (data.pronto) {
+        fase = "pronto";
+        setStatus("Pronto!", "ready");
+        finalizarBtn.disabled = false;
+        addMessage("✅ Perfeito! Agora você pode gerar sua lista de compras.");
+      }
+    } catch (erro) {
+      console.error("Erro ao verificar prontidão:", erro);
+    }
+  }
+
+  async function finalizarLista() {
+    if (fase !== "pronto") {
+      addMessage("⚠️ Ainda não está pronto. Continue resolvendo as escolhas.");
+      return;
+    }
+
+    showUserMessage("Quero finalizar a lista de compras.");
+    setStatus("Gerando lista...", "loading");
+    const typingMsg = addMessage("", false, true);
+
+    try {
+      const res = await fetch(`${API_URL}/finalizar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dieta_final: dieta })
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      listaFinal = data.lista_compras;
+
+      typingMsg.remove();
+
+      // Limpar lista anterior
+      listaDiv.innerHTML = "";
+      emptyState.style.display = "none";
+
+      if (Array.isArray(listaFinal) && listaFinal.length > 0) {
+        listaFinal.forEach((item, idx) => {
+          const itemDiv = document.createElement("div");
+          itemDiv.className = "lista-item";
+          itemDiv.innerHTML = `
+            <strong>${idx + 1}. ${item.nome || item.item || "Item"}</strong>
+            <small><strong>Quantidade:</strong> ${item.quantidade || "N/A"}</small><br>
+            <small><strong>Motivo:</strong> ${item.motivo || "Consumo semanal"}</small>
+          `;
+          listaDiv.appendChild(itemDiv);
+        });
+      } else {
+        listaDiv.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">Nenhum item na lista</div>';
+      }
+
+      listaDiv.classList.add("visible");
+
+      addMessage("🎉 Lista pronta! Você pode visualizar no painel lateral à direita.");
+      setStatus("Concluído", "ready");
+      finalizarBtn.disabled = true;
+
+    } catch (erro) {
+      typingMsg.remove();
+      addMessage(`❌ Erro ao gerar lista: ${erro.message}`);
+      console.error(erro);
+      setStatus("Erro", "default");
+    }
+  }
+
+  async function baixarPdf() {
+    if (!listaFinal) return;
+
+    try {
+      setStatus("Gerando PDF...", "loading");
+
+      const res = await fetch(`${API_URL}/gerar-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lista_compras: listaFinal })
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "lista_de_compras.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+      setStatus("PDF baixado!", "ready");
+      setTimeout(() => setStatus("Pronto", "ready"), 2000);
+
+      addMessage("📥 PDF baixado com sucesso!");
+    } catch (erro) {
+      addMessage(`❌ Erro ao gerar PDF: ${erro.message}`);
+      console.error(erro);
+      setStatus("Erro", "default");
+    }
+  }
+
+  // Event Listeners
+  sendBtn.onclick = async () => {
+    if (fase === "inicial") {
+      await enviarDietaInicial();
+    } else if (fase === "conversando") {
+      await enviarMensagemChat();
+    }
+  };
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendBtn.click();
+    }
+  });
+
+  finalizarBtn.onclick = finalizarLista;
+  pdfBtn.onclick = () => pdfInput.click();
+
+  pdfInput.addEventListener("change", async () => {
+    if (pdfInput.files.length > 0 && fase === "inicial") {
+      await enviarDietaInicial();
+    }
+  });
+
+  // Auto-resize textarea
+  input.addEventListener("input", () => {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 100) + "px";
+  });
+
+  // Mensagem inicial
+  addMessage("👋 Olá! Eu sou seu assistente de compras com IA.\n\n📝 Envie sua dieta em texto ou PDF, e vamos conversar para confirmar suas preferências.\n\n🛒 Depois vou gerar uma lista de compras completa e otimizada para você!");
+
+  // Verificar API
+  fetch(`${API_URL}/health`).catch(() => {
+    addMessage("⚠️ Servidor não está rodando em http://127.0.0.1:8000\n\nExecute: uvicorn server:app --reload");
+  });
+</script>
+
+</body>
+</html>

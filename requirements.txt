@@ -1,0 +1,19 @@
+# 📦 DEPENDÊNCIAS DO PROJETO - VERSÕES FIXAS PARA SEGURANÇA
+
+# FastAPI e servidor
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# OpenAI
+openai==1.59.6
+
+# Ambiente e configuração
+python-dotenv==1.0.1
+
+# PDF
+PyPDF2==3.0.1
+reportlab==4.2.5
+
+# Utilitários
+typing-extensions==4.12.2
