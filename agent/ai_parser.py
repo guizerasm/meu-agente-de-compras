@@ -229,15 +229,14 @@ def extrair_numero_quantidade(qtd_str: str) -> float:
 
 def consolidar_substituicoes(dieta: dict) -> dict:
     """
-    Pós-processamento: consolida itens que são substituições (frango/carne/peixe)
-    em uma única categoria, usando a MAIOR quantidade entre as opções.
+    Pós-processamento: quando há múltiplas opções de proteína/carboidrato/fruta,
+    mantém apenas o PRIMEIRO item (o principal) com sua quantidade correta.
 
     Exemplo:
-    - Frango 150g OU Carne 140g OU Peixe 180g
-    - Resultado: "Proteína variada" com 180g (a maior)
+    - "Frango 150g OU Carne 140g OU Peixe 180g"
+    - Resultado: Frango 150g (o primeiro, é o padrão)
+    - Se usuário quiser trocar, ele pede na etapa de ajustes
     """
-    import re
-
     # Categorias de substituição comuns
     PROTEINAS = ["frango", "carne", "peixe", "tilapia", "filé", "file", "bife",
                  "alcatra", "patinho", "acém", "acem", "costela", "lombo",
@@ -267,7 +266,6 @@ def consolidar_substituicoes(dieta: dict) -> dict:
             nome_lower = item.get("item", "").lower()
             encontrou = False
 
-            # Verificar se é proteína
             for p in PROTEINAS:
                 if p in nome_lower:
                     proteinas_encontradas.append(item)
@@ -293,70 +291,27 @@ def consolidar_substituicoes(dieta: dict) -> dict:
 
         novos_itens = outros_itens.copy()
 
-        # PROTEÍNAS: consolidar pegando a MAIOR quantidade
+        # PROTEÍNAS: pegar o PRIMEIRO (o principal)
         if len(proteinas_encontradas) > 1:
-            # Encontrar a maior quantidade
-            maior_qtd = "150g"
-            maior_valor = 0
-            nomes = []
-            for p in proteinas_encontradas:
-                nomes.append(p.get("item", ""))
-                qtd = p.get("quantidade", "0g")
-                valor = extrair_numero_quantidade(qtd)
-                if valor > maior_valor:
-                    maior_valor = valor
-                    maior_qtd = qtd
-
-            print(f"  - Consolidando {len(proteinas_encontradas)} proteínas em '{nome_refeicao}': {nomes} → {maior_qtd}")
-            novos_itens.append({
-                "item": "Proteína variada",
-                "quantidade": maior_qtd,
-                "vezes": 1
-            })
+            primeiro = proteinas_encontradas[0]
+            print(f"  - {nome_refeicao}: {len(proteinas_encontradas)} proteínas → mantendo '{primeiro.get('item')}' ({primeiro.get('quantidade')})")
+            novos_itens.append(primeiro)
         elif len(proteinas_encontradas) == 1:
             novos_itens.append(proteinas_encontradas[0])
 
-        # CARBOIDRATOS: consolidar pegando a MAIOR quantidade
+        # CARBOIDRATOS: pegar o PRIMEIRO
         if len(carboidratos_encontrados) > 1:
-            maior_qtd = "200g"
-            maior_valor = 0
-            nomes = []
-            for c in carboidratos_encontrados:
-                nomes.append(c.get("item", ""))
-                qtd = c.get("quantidade", "0g")
-                valor = extrair_numero_quantidade(qtd)
-                if valor > maior_valor:
-                    maior_valor = valor
-                    maior_qtd = qtd
-
-            print(f"  - Consolidando {len(carboidratos_encontrados)} carboidratos em '{nome_refeicao}': {nomes} → {maior_qtd}")
-            novos_itens.append({
-                "item": "Carboidrato variado",
-                "quantidade": maior_qtd,
-                "vezes": 1
-            })
+            primeiro = carboidratos_encontrados[0]
+            print(f"  - {nome_refeicao}: {len(carboidratos_encontrados)} carboidratos → mantendo '{primeiro.get('item')}' ({primeiro.get('quantidade')})")
+            novos_itens.append(primeiro)
         elif len(carboidratos_encontrados) == 1:
             novos_itens.append(carboidratos_encontrados[0])
 
-        # FRUTAS: consolidar pegando a MAIOR quantidade
+        # FRUTAS: pegar a PRIMEIRA
         if len(frutas_encontradas) > 1:
-            maior_qtd = "1 unidade"
-            maior_valor = 0
-            nomes = []
-            for f in frutas_encontradas:
-                nomes.append(f.get("item", ""))
-                qtd = f.get("quantidade", "0")
-                valor = extrair_numero_quantidade(qtd)
-                if valor > maior_valor:
-                    maior_valor = valor
-                    maior_qtd = qtd
-
-            print(f"  - Consolidando {len(frutas_encontradas)} frutas em '{nome_refeicao}': {nomes} → {maior_qtd}")
-            novos_itens.append({
-                "item": "Fruta variada",
-                "quantidade": maior_qtd,
-                "vezes": 1
-            })
+            primeiro = frutas_encontradas[0]
+            print(f"  - {nome_refeicao}: {len(frutas_encontradas)} frutas → mantendo '{primeiro.get('item')}' ({primeiro.get('quantidade')})")
+            novos_itens.append(primeiro)
         elif len(frutas_encontradas) == 1:
             novos_itens.append(frutas_encontradas[0])
 
