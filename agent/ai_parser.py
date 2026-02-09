@@ -9,19 +9,14 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # 1️⃣ Interpretação técnica da dieta - PRESERVA ESTRUTURA DE REFEIÇÕES
 SYSTEM_INTERPRETACAO = """
-Você é um nutricionista assistente EXPERIENTE em interpretar dietas profissionais.
+Você é um nutricionista que interpreta dietas.
 
-🚨 OBJETIVO CRÍTICO: Preservar a ESTRUTURA DE REFEIÇÕES para cálculos precisos.
+🎯 OBJETIVO: Extrair alimentos e quantidades de cada refeição.
 
-⚠️ REGRA PRINCIPAL: Separe CADA refeição individualmente!
-Uma dieta típica tem: Café da manhã, Almoço, Lanche da tarde, Jantar (e às vezes Ceia).
-
-FORMATO DE SAÍDA OBRIGATÓRIO:
+FORMATO DE SAÍDA (JSON):
 {
   "refeicoes": {
-    "cafe_manha": [
-      {"item": "Nome do alimento", "quantidade": "quantidade com unidade", "vezes": 1}
-    ],
+    "cafe_manha": [{"item": "nome", "quantidade": "qtd", "vezes": 1}],
     "almoco": [...],
     "lanche_tarde": [...],
     "jantar": [...],
@@ -31,98 +26,35 @@ FORMATO DE SAÍDA OBRIGATÓRIO:
   "escolhas": []
 }
 
-📋 REGRAS DE INTERPRETAÇÃO:
+🚨 REGRA CRÍTICA - OPÇÕES COM "OU":
+Quando a dieta diz "X ou Y ou Z", isso é UMA ESCOLHA, não 3 alimentos!
+O usuário come X OU Y OU Z, nunca os 3 juntos!
 
-1. IDENTIFICAR REFEIÇÕES:
-   - "Café da manhã", "07:30", "Desjejum" → cafe_manha
-   - "Almoço", "12:00", "12h" → almoco
-   - "Lanche", "15:00", "Lanche da tarde" → lanche_tarde
-   - "Jantar", "19:00", "20:00" → jantar
-   - "Ceia", "22:00", "Antes de dormir" → ceia
+ERRADO (NÃO FAÇA):
+"Frango ou Carne ou Peixe" →
+  {"item": "Frango", "quantidade": "150g"},
+  {"item": "Carne", "quantidade": "140g"},
+  {"item": "Peixe", "quantidade": "180g"}
+(Isso triplica a proteína! ERRADO!)
 
-2. EXTRAIR QUANTIDADES EXATAS:
-   - "Arroz (200g)" → {"item": "Arroz", "quantidade": "200g", "vezes": 1}
-   - "2 ovos" → {"item": "Ovos", "quantidade": "2 unidades", "vezes": 1}
-   - "1 pote de iogurte" → {"item": "Iogurte", "quantidade": "1 pote", "vezes": 1}
-   - "150g de frango" → {"item": "Frango", "quantidade": "150g", "vezes": 1}
+CORRETO:
+"Frango (150g) ou Carne (140g) ou Peixe (180g)" →
+  {"item": "Proteina variada", "quantidade": "150g", "vezes": 1}
+(É UMA porção de proteína por refeição, o tipo varia!)
 
-3. CONSOLIDAR OPÇÕES (quando houver "ou"):
-   - "Frango (150g) ou Carne (140g) ou Peixe (180g)"
-     → {"item": "Proteina (frango/carne/peixe)", "quantidade": "150g", "vezes": 1}
-   - "Banana ou Maçã ou Laranja (1 unidade)"
-     → {"item": "Fruta variada", "quantidade": "1 unidade", "vezes": 1}
-   - "Arroz (200g) ou Batata (300g)"
-     → {"item": "Carboidrato (arroz/batata)", "quantidade": "200g", "vezes": 1}
+MAIS EXEMPLOS CORRETOS:
+- "Banana ou Maçã ou Laranja" → {"item": "Fruta", "quantidade": "1 unidade"}
+- "Arroz ou Batata" → {"item": "Carboidrato", "quantidade": "200g"}
+- "Leite ou Iogurte" → {"item": "Laticinio", "quantidade": "1 porcao"}
 
-4. DETECÇÃO DE PERÍODO:
-   - "Todos os dias" ou horários específicos → dias=1 (multiplicar por 7)
-   - "Segunda", "Terça", dias da semana → dias=7 (já é semanal)
+REGRAS:
+1. Identificar refeições pelos horários ou nomes (café, almoço, lanche, jantar, ceia)
+2. Extrair quantidades numéricas (200g, 2 unidades, 1 pote)
+3. "à vontade" ou sem quantidade → "a vontade"
+4. dias=1 significa dieta diária (sistema multiplica por 7)
+5. escolhas = [] (sempre vazio)
 
-5. NÃO ADICIONAR ESCOLHAS - deixe vazio: "escolhas": []
-
-EXEMPLO COMPLETO:
-
-ENTRADA:
-"
-Todos os dias
-07:30 - Café da manhã
-• Pão francês (1 unidade)
-• Ovo (2 unidades)
-• Queijo minas (30g)
-• Iogurte desnatado (1 pote)
-
-12:00 - Almoço
-• Arroz (200g)
-• Feijão (100g)
-• Frango grelhado (150g) ou Carne (140g)
-• Salada à vontade
-• Azeite (1 colher)
-
-15:30 - Lanche
-• Fruta (1 unidade)
-• Whey Protein (30g)
-
-19:30 - Jantar
-• Arroz (150g)
-• Peixe (180g) ou Frango (150g)
-• Legumes (100g)
-"
-
-SAÍDA:
-{
-  "refeicoes": {
-    "cafe_manha": [
-      {"item": "Pao frances", "quantidade": "1 unidade", "vezes": 1},
-      {"item": "Ovos", "quantidade": "2 unidades", "vezes": 1},
-      {"item": "Queijo minas", "quantidade": "30g", "vezes": 1},
-      {"item": "Iogurte desnatado", "quantidade": "1 pote", "vezes": 1}
-    ],
-    "almoco": [
-      {"item": "Arroz", "quantidade": "200g", "vezes": 1},
-      {"item": "Feijao", "quantidade": "100g", "vezes": 1},
-      {"item": "Proteina (frango/carne)", "quantidade": "150g", "vezes": 1},
-      {"item": "Salada", "quantidade": "a vontade", "vezes": 1},
-      {"item": "Azeite", "quantidade": "1 colher", "vezes": 1}
-    ],
-    "lanche_tarde": [
-      {"item": "Fruta", "quantidade": "1 unidade", "vezes": 1},
-      {"item": "Whey Protein", "quantidade": "30g", "vezes": 1}
-    ],
-    "jantar": [
-      {"item": "Arroz", "quantidade": "150g", "vezes": 1},
-      {"item": "Proteina (peixe/frango)", "quantidade": "180g", "vezes": 1},
-      {"item": "Legumes", "quantidade": "100g", "vezes": 1}
-    ]
-  },
-  "dias": 1,
-  "escolhas": []
-}
-
-⚠️ IMPORTANTE:
-- Se não conseguir identificar refeições separadas, coloque tudo em "almoco"
-- Sempre extraia quantidades numéricas quando possível
-- Use "a vontade" para itens sem quantidade definida
-- NUNCA retorne refeicoes vazio
+⚠️ NUNCA duplique/triplique itens que são opções!
 """
 
 # 2️⃣ Conversa humana - ULTRA RÁPIDA E DIRETA
@@ -177,163 +109,27 @@ Bot: "Perfeito! 3 pessoas, azeite removido. Gerando... [LISTA_PRONTA]"
 ⚠️ IMPORTANTE: Adicione [LISTA_PRONTA] no final quando for gerar.
 """
 
-# 3️⃣ Lista final de compras - CÁLCULO POR REFEIÇÃO
+# 3️⃣ Lista final de compras - FORMATAR LISTA PRÉ-CALCULADA
 SYSTEM_COMPRA = """
-Você é um assistente de compras EXPERIENTE que calcula quantidades PRECISAS.
+Você recebe uma lista de compras JÁ CALCULADA pelo sistema.
+Sua função é apenas FORMATAR para exibição ao usuário.
 
-🚨 FORMATO DE SAÍDA OBRIGATÓRIO:
-Retorne APENAS um array JSON: [{"nome": "...", "quantidade": "...", "motivo": "..."}]
-NÃO adicione texto, markdown ou explicações. APENAS o JSON.
+ENTRADA: Lista com quantidades já calculadas para a semana
+SAÍDA: JSON array formatado
 
-📊 MÉTODO DE CÁLCULO POR REFEIÇÃO (CRÍTICO):
+Regras de formatação:
+1. Ovos: converter para dúzias (12 un = 1 dúzia, 24 un = 2 dúzias)
+2. Iogurte: manter em "potes"
+3. Pão: manter em "unidades"
+4. Grãos (arroz, feijão): arredondar para kg (1kg, 1.5kg, 2kg)
+5. Carnes: arredondar para 500g, 1kg, 1.5kg, 2kg, etc.
+6. Frutas: manter unidades ou converter para kg
 
-A dieta virá estruturada por refeições. Você DEVE:
+Formato de saída:
+[{"nome": "Item", "quantidade": "X unidade", "motivo": "refeição (cálculo)"}]
 
-1️⃣ PASSO 1 - SOMAR QUANTIDADES DIÁRIAS:
-   Para CADA alimento, some as quantidades de TODAS as refeições em que aparece.
-
-   Exemplo - Arroz aparece em 2 refeições:
-   - Almoço: 200g
-   - Jantar: 150g
-   - TOTAL DIÁRIO: 200g + 150g = 350g/dia
-
-   Exemplo - Ovos aparecem em 1 refeição:
-   - Café da manhã: 2 unidades
-   - TOTAL DIÁRIO: 2 unidades/dia
-
-   Exemplo - Proteína aparece em 2 refeições:
-   - Almoço: 150g (frango)
-   - Jantar: 180g (peixe)
-   - TOTAL DIÁRIO: 150g + 180g = 330g/dia
-
-2️⃣ PASSO 2 - MULTIPLICAR POR 7 DIAS:
-   Se "dias": 1 → multiplicar por 7
-   Se "dias": 7 → já é semanal, não multiplicar
-
-   Arroz: 350g/dia × 7 = 2450g = 2.45kg
-   Ovos: 2/dia × 7 = 14 unidades
-   Proteína: 330g/dia × 7 = 2310g = 2.31kg
-
-3️⃣ PASSO 3 - MULTIPLICAR POR PESSOAS:
-   Use o campo "pessoas" (padrão: 1)
-
-   Para 2 pessoas:
-   Arroz: 2.45kg × 2 = 4.9kg
-   Ovos: 14 × 2 = 28 unidades
-   Proteína: 2.31kg × 2 = 4.62kg
-
-4️⃣ PASSO 4 - ARREDONDAR PARA UNIDADES DE MERCADO:
-   - Arroz/Feijão/Macarrão: 1kg, 2kg, 3kg, 5kg
-   - Carnes: 500g, 1kg, 1.5kg, 2kg, 2.5kg, 3kg
-   - Ovos: 6 un (meia dúzia), 12 un (1 dúzia), 24 un (2 dúzias), 30 un (bandeja)
-   - Iogurte: unidades (6, 7, 8, 12 potes)
-   - Pão francês: unidades (7, 14, 21)
-   - Pão de forma: pacotes (1, 2)
-   - Frutas: kg ou unidades (7, 14 bananas)
-   - Queijo: 150g, 200g, 300g, 400g
-   - Azeite: 250ml, 500ml, 1L
-
-   4.9kg arroz → 5kg
-   28 ovos → 2.5 dúzias → 3 dúzias (36)
-   4.62kg proteína → 5kg (dividir entre tipos)
-
-📋 UNIDADES DE MERCADO OBRIGATÓRIAS:
-- Iogurte → UNIDADES/POTES (ex: "7 potes") NUNCA litros
-- Ovos → DÚZIAS (ex: "3 dúzias") NUNCA unidades soltas
-- Pão francês → UNIDADES (ex: "14 unidades") - lembre: 1/dia x 7 dias = 7, 2/dia x 7 = 14
-- Pão de forma → PACOTES (ex: "2 pacotes")
-- Queijo → GRAMAS (ex: "300g")
-- Frutas → KG ou UNIDADES (ex: "2kg" ou "14 bananas")
-- Whey Protein → POTE ou SACHÊS (se não tiver em casa)
-
-🚨 VERIFICAÇÃO OBRIGATÓRIA ANTES DE RETORNAR:
-- Se dias=1, você DEVE multiplicar tudo por 7
-- Pão: 1/dia → 7 unidades, 2/dia → 14 unidades
-- Ovos: 2/dia → 14 unidades → 2 dúzias (arredondar)
-- Iogurte: 1/dia → 7 potes
-- Arroz: 200g/dia → 1400g → 1.5kg
-
-⚠️ REGRAS ESPECIAIS:
-
-1. ALIMENTOS EM CASA:
-   Se existir "alimentos_em_casa", NÃO inclua esses itens.
-
-2. PREFERÊNCIAS:
-   - "preferencia_proteina": "frango" → só frango
-   - "preferencia_proteina": "variado" → dividir entre tipos
-   - "preferencia_carboidrato": igual lógica
-   - "preferencia_frutas": respeitar
-
-3. VALIDAÇÃO (quantidades razoáveis para 1 pessoa/semana):
-   - Arroz: 1-2kg ✓
-   - Feijão: 500g-1kg ✓
-   - Frango: 1-2kg ✓
-   - Ovos: 1-2 dúzias ✓
-   - Iogurte: 7 potes ✓
-   - Frutas: 2-3kg ✓
-
-EXEMPLO COMPLETO:
-
-ENTRADA:
-{
-  "refeicoes": {
-    "cafe_manha": [
-      {"item": "Ovos", "quantidade": "2 unidades"},
-      {"item": "Pao frances", "quantidade": "1 unidade"},
-      {"item": "Iogurte", "quantidade": "1 pote"}
-    ],
-    "almoco": [
-      {"item": "Arroz", "quantidade": "200g"},
-      {"item": "Feijao", "quantidade": "80g"},
-      {"item": "Frango", "quantidade": "150g"}
-    ],
-    "lanche_tarde": [
-      {"item": "Fruta", "quantidade": "1 unidade"}
-    ],
-    "jantar": [
-      {"item": "Arroz", "quantidade": "150g"},
-      {"item": "Peixe", "quantidade": "180g"}
-    ]
-  },
-  "dias": 1,
-  "pessoas": 2
-}
-
-CÁLCULO:
-- Ovos: 2/dia × 7 × 2 pessoas = 28 → 3 dúzias
-- Pão: 1/dia × 7 × 2 = 14 unidades
-- Iogurte: 1/dia × 7 × 2 = 14 potes
-- Arroz: (200g + 150g)/dia × 7 × 2 = 4900g → 5kg
-- Feijão: 80g/dia × 7 × 2 = 1120g → 1.5kg
-- Frango: 150g/dia × 7 × 2 = 2100g → 2.5kg
-- Fruta: 1/dia × 7 × 2 = 14 unidades
-- Peixe: 180g/dia × 7 × 2 = 2520g → 2.5kg
-
-SAÍDA:
-[
-  {"nome": "Ovos", "quantidade": "3 duzias", "motivo": "cafe manha (2/dia x 7 x 2)"},
-  {"nome": "Pao frances", "quantidade": "14 unidades", "motivo": "cafe manha (1/dia x 7 x 2)"},
-  {"nome": "Iogurte natural", "quantidade": "14 potes", "motivo": "cafe manha (1/dia x 7 x 2)"},
-  {"nome": "Arroz", "quantidade": "5kg", "motivo": "almoco+jantar (350g/dia x 7 x 2)"},
-  {"nome": "Feijao", "quantidade": "1.5kg", "motivo": "almoco (80g/dia x 7 x 2)"},
-  {"nome": "Frango (peito)", "quantidade": "2.5kg", "motivo": "almoco (150g/dia x 7 x 2)"},
-  {"nome": "Frutas variadas", "quantidade": "14 unidades", "motivo": "lanche (1/dia x 7 x 2)"},
-  {"nome": "Peixe (tilapia)", "quantidade": "2.5kg", "motivo": "jantar (180g/dia x 7 x 2)"}
-]
-
-🚨 LEMBRE-SE:
-1. Some quantidades de TODAS as refeições onde o item aparece
-2. Multiplique por 7 dias (se dias=1) ⚠️ OBRIGATÓRIO!
-3. Multiplique por número de pessoas
-4. Arredonde para unidades de mercado
-5. Retorne APENAS o JSON, sem texto extra
-
-⚠️ ERRO COMUM - NÃO COMETA:
-ERRADO: Pão 1/dia → "1 unidade" (esqueceu de multiplicar por 7!)
-CORRETO: Pão 1/dia × 7 dias = "7 unidades"
-
-ERRADO: Ovos 2/dia → "2 unidades" (esqueceu de multiplicar por 7!)
-CORRETO: Ovos 2/dia × 7 dias = 14 → "2 dúzias"
+Se a lista vier vazia ou com erro, retorne:
+[{"nome": "Erro", "quantidade": "-", "motivo": "Não foi possível calcular"}]
 """
 
 def interpretar_dieta(texto: str) -> dict:
@@ -426,52 +222,182 @@ def conversar_com_usuario(dieta: dict, historico: list) -> str:
     return r.choices[0].message.content
 
 
-def gerar_lista_compras(dieta_final: dict):
-    print(f"\n[GERAR_LISTA] Gerando lista de compras...")
-    print(f"[GERAR_LISTA] Dieta recebida:")
+def calcular_quantidades_python(dieta: dict) -> list:
+    """
+    Calcula quantidades de compras usando Python (não depende da IA para contas)
+    """
+    import re
+    from collections import defaultdict
 
-    # Mostrar estrutura de refeicoes se existir
-    if "refeicoes" in dieta_final:
+    refeicoes = dieta.get("refeicoes", {})
+    dias = dieta.get("dias", 1)
+    pessoas = dieta.get("pessoas", 1)
+    alimentos_em_casa = [a.lower() for a in dieta.get("alimentos_em_casa", [])]
+
+    # Multiplicador: se dias=1, é dieta diária, multiplicar por 7
+    multiplicador_dias = 7 if dias == 1 else 1
+
+    print(f"\n[CALC_PYTHON] Calculando quantidades...")
+    print(f"  - Dias na dieta: {dias} → multiplicador: {multiplicador_dias}")
+    print(f"  - Pessoas: {pessoas}")
+    print(f"  - Alimentos em casa: {alimentos_em_casa}")
+
+    # Agregar quantidades por item
+    itens_agregados = defaultdict(lambda: {"quantidade_total": 0, "unidade": "", "refeicoes": []})
+
+    for nome_refeicao, itens in refeicoes.items():
+        for item in itens:
+            nome_item = item.get("item", "").strip()
+            qtd_str = item.get("quantidade", "").strip().lower()
+
+            # Pular itens "a vontade" ou vazios
+            if not nome_item or qtd_str in ["a vontade", "à vontade", ""]:
+                continue
+
+            # Verificar se já tem em casa
+            if any(casa in nome_item.lower() for casa in alimentos_em_casa):
+                print(f"  - Pulando {nome_item} (já tem em casa)")
+                continue
+
+            # Extrair número e unidade
+            match = re.search(r'(\d+\.?\d*)\s*(g|kg|ml|l|unidade|unidades|pote|potes|colher|colheres|fatia|fatias)?', qtd_str)
+            if match:
+                qtd_num = float(match.group(1))
+                unidade = match.group(2) or "unidade"
+
+                # Normalizar unidades
+                if unidade in ["unidades"]:
+                    unidade = "unidade"
+                elif unidade in ["potes"]:
+                    unidade = "pote"
+                elif unidade in ["colheres"]:
+                    unidade = "colher"
+                elif unidade in ["fatias"]:
+                    unidade = "fatia"
+                elif unidade == "l":
+                    unidade = "ml"
+                    qtd_num *= 1000
+                elif unidade == "kg":
+                    unidade = "g"
+                    qtd_num *= 1000
+
+                # Agregar
+                chave = nome_item.lower()
+                itens_agregados[chave]["nome"] = nome_item
+                itens_agregados[chave]["quantidade_total"] += qtd_num
+                itens_agregados[chave]["unidade"] = unidade
+                if nome_refeicao not in itens_agregados[chave]["refeicoes"]:
+                    itens_agregados[chave]["refeicoes"].append(nome_refeicao)
+
+    # Calcular quantidade final (x7 dias x pessoas)
+    lista_final = []
+
+    for chave, dados in itens_agregados.items():
+        qtd_diaria = dados["quantidade_total"]
+        qtd_semanal = qtd_diaria * multiplicador_dias * pessoas
+        unidade = dados["unidade"]
+        refeicoes_str = "+".join(dados["refeicoes"])
+
+        # Formatar quantidade para unidades de mercado
+        if unidade == "g":
+            if qtd_semanal >= 1000:
+                qtd_formatada = f"{qtd_semanal/1000:.1f}kg".replace(".0kg", "kg")
+            else:
+                qtd_formatada = f"{int(qtd_semanal)}g"
+        elif unidade == "unidade":
+            qtd_int = int(qtd_semanal)
+            # Ovos: converter para dúzias
+            if "ovo" in chave:
+                duzias = qtd_int / 12
+                if duzias <= 1:
+                    qtd_formatada = "1 dúzia"
+                else:
+                    qtd_formatada = f"{int(round(duzias))} dúzias"
+            else:
+                qtd_formatada = f"{qtd_int} unidades"
+        elif unidade == "pote":
+            qtd_formatada = f"{int(qtd_semanal)} potes"
+        elif unidade == "colher":
+            # Azeite: converter para ml (1 colher ≈ 15ml)
+            if "azeite" in chave or "óleo" in chave or "oleo" in chave:
+                ml_total = qtd_semanal * 15
+                if ml_total >= 500:
+                    qtd_formatada = "1 litro"
+                else:
+                    qtd_formatada = "500ml"
+            else:
+                qtd_formatada = f"{int(qtd_semanal)} colheres"
+        elif unidade == "fatia":
+            qtd_formatada = f"{int(qtd_semanal)} fatias"
+        elif unidade == "ml":
+            if qtd_semanal >= 1000:
+                qtd_formatada = f"{qtd_semanal/1000:.1f}L".replace(".0L", "L")
+            else:
+                qtd_formatada = f"{int(qtd_semanal)}ml"
+        else:
+            qtd_formatada = f"{int(qtd_semanal)} {unidade}"
+
+        motivo = f"{refeicoes_str} ({qtd_diaria:.0f}/dia x {multiplicador_dias} x {pessoas})"
+
+        lista_final.append({
+            "nome": dados["nome"],
+            "quantidade": qtd_formatada,
+            "motivo": motivo
+        })
+
+        print(f"  - {dados['nome']}: {qtd_diaria}/dia × {multiplicador_dias} × {pessoas} = {qtd_formatada}")
+
+    print(f"[CALC_PYTHON] Total: {len(lista_final)} itens\n")
+    return lista_final
+
+
+def gerar_lista_compras(dieta_final: dict):
+    """
+    Gera lista de compras usando cálculos em Python (confiável)
+    Fallback para IA apenas se não tiver estrutura de refeições
+    """
+    print(f"\n[GERAR_LISTA] Gerando lista de compras...")
+
+    # Mostrar estrutura
+    if "refeicoes" in dieta_final and dieta_final["refeicoes"]:
         refeicoes = dieta_final.get("refeicoes", {})
+        print(f"[GERAR_LISTA] Usando cálculo PYTHON (confiável)")
         print(f"  - Refeicoes: {len(refeicoes)}")
         for refeicao, itens in refeicoes.items():
             print(f"    - {refeicao}: {len(itens)} itens")
-            for item in itens[:3]:  # Mostrar primeiros 3
-                print(f"      * {item.get('item', '?')}: {item.get('quantidade', '?')}")
-            if len(itens) > 3:
-                print(f"      * ... e mais {len(itens) - 3} itens")
-    else:
-        print(f"  - Fixos: {len(dieta_final.get('fixos', []))} itens")
 
+        # ✅ USAR CÁLCULO PYTHON - confiável e determinístico
+        lista = calcular_quantidades_python(dieta_final)
+
+        if lista:
+            print(f"[GERAR_LISTA] Lista calculada: {len(lista)} itens")
+            for i, item in enumerate(lista[:5], 1):
+                print(f"  {i}. {item.get('nome', '?')} - {item.get('quantidade', '?')}")
+            if len(lista) > 5:
+                print(f"  ... e mais {len(lista) - 5} itens")
+            return lista
+
+    # Fallback: usar IA se não tiver estrutura de refeições
+    print(f"[GERAR_LISTA] Fallback: usando OpenAI (sem estrutura de refeições)")
+    print(f"  - Fixos: {len(dieta_final.get('fixos', []))} itens")
     print(f"  - Pessoas: {dieta_final.get('pessoas', 1)}")
     print(f"  - Dias: {dieta_final.get('dias', 1)}")
-    print(f"  - Alimentos em casa: {dieta_final.get('alimentos_em_casa', [])}")
-    print(f"  - Preferência proteína: {dieta_final.get('preferencia_proteina', 'não definido')}")
 
     dieta_json = json.dumps(dieta_final, ensure_ascii=False)
-    print(f"\n[GERAR_LISTA] Enviando para OpenAI ({len(dieta_json)} caracteres)...")
 
     r = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": SYSTEM_COMPRA},
-            {
-                "role": "user",
-                "content": dieta_json
-            }
+            {"role": "user", "content": dieta_json}
         ],
-        temperature=0.2
+        temperature=0
     )
 
     resposta_ai = r.choices[0].message.content
-    print(f"\n[GERAR_LISTA] Resposta da OpenAI:")
-    print(resposta_ai[:1000])  # Primeiros 1000 chars
-    print()
-
-    # ⚠️ LIMPAR delimitadores markdown e texto extra (OpenAI às vezes retorna "Lista: [...]" ou ```json ... ```)
     resposta_limpa = resposta_ai.strip()
 
-    # Remover delimitadores markdown
+    # Limpar markdown
     if resposta_limpa.startswith("```json"):
         resposta_limpa = resposta_limpa[7:]
     elif resposta_limpa.startswith("```"):
@@ -480,8 +406,7 @@ def gerar_lista_compras(dieta_final: dict):
         resposta_limpa = resposta_limpa[:-3]
     resposta_limpa = resposta_limpa.strip()
 
-    # Remover texto antes do JSON (ex: "Lista: [...]")
-    # Procurar pelo primeiro [ ou { que inicia o JSON
+    # Encontrar início do JSON
     inicio_json = min(
         resposta_limpa.find('[') if resposta_limpa.find('[') != -1 else len(resposta_limpa),
         resposta_limpa.find('{') if resposta_limpa.find('{') != -1 else len(resposta_limpa)
@@ -491,15 +416,8 @@ def gerar_lista_compras(dieta_final: dict):
 
     try:
         lista = json.loads(resposta_limpa)
-        print(f"[GERAR_LISTA] Lista gerada com sucesso: {len(lista)} itens")
-        for i, item in enumerate(lista[:5], 1):  # Mostrar primeiros 5
-            print(f"  {i}. {item.get('nome', '?')} - {item.get('quantidade', '?')}")
-        if len(lista) > 5:
-            print(f"  ... e mais {len(lista) - 5} itens")
-        print()
+        print(f"[GERAR_LISTA] Lista gerada via IA: {len(lista)} itens")
         return lista
     except Exception as e:
         print(f"[GERAR_LISTA ERRO] Falha ao parsear JSON: {e}")
-        print(f"[GERAR_LISTA ERRO] Resposta completa: {resposta_ai}")
-        print()
         return []
