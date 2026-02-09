@@ -7,116 +7,122 @@ load_dotenv(override=True)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# 1️⃣ Interpretação técnica da dieta
+# 1️⃣ Interpretação técnica da dieta - PRESERVA ESTRUTURA DE REFEIÇÕES
 SYSTEM_INTERPRETACAO = """
-Você é um nutricionista assistente EXPERIENTE em interpretar dietas profissionais de diferentes formatos.
+Você é um nutricionista assistente EXPERIENTE em interpretar dietas profissionais.
 
-Interprete uma dieta (texto ou PDF de nutricionista) e devolva JSON estruturado.
+🚨 OBJETIVO CRÍTICO: Preservar a ESTRUTURA DE REFEIÇÕES para cálculos precisos.
 
-⚠️ REGRAS CRÍTICAS PARA INTERPRETAÇÃO:
+⚠️ REGRA PRINCIPAL: Separe CADA refeição individualmente!
+Uma dieta típica tem: Café da manhã, Almoço, Lanche da tarde, Jantar (e às vezes Ceia).
 
-1. FORMATOS ACEITOS:
-   - Formato com bullet points: "• Arroz (200: Grama)"
-   - Formato com parênteses: "Frango (Grama: 150)"
-   - Formato simples: "Arroz 200g"
-   - Múltiplas substituições: "Substitui��o 1", "Substitui��o 2"
-   - SEMPRE ignore caracteres estranhos de encoding (�, ç, etc)
+FORMATO DE SAÍDA OBRIGATÓRIO:
+{
+  "refeicoes": {
+    "cafe_manha": [
+      {"item": "Nome do alimento", "quantidade": "quantidade com unidade", "vezes": 1}
+    ],
+    "almoco": [...],
+    "lanche_tarde": [...],
+    "jantar": [...],
+    "ceia": [...]
+  },
+  "dias": 1,
+  "escolhas": []
+}
 
-2. CONSOLIDAÇÃO INTELIGENTE (FUNDAMENTAL):
-   ⚠️ Se uma linha tem MAIS DE 5 opções com "ou", CONSOLIDE:
+📋 REGRAS DE INTERPRETAÇÃO:
 
-   Exemplo REAL que você VAI receber:
-   "• Banana prata (1 unidade = 80g) ou Abacaxi (150g) ou Uva de qualquer tipo (105g) ou Morango normal/congelado (245g) ou Melão (230g) ou Kiwi (2 unidades médias) ou ameixa (2 unidades) ou Melancia (230g) ou Caqui (1 unidade) ou Mamão de qualquer tipo (230g) ou Manga (110g) ou Goiaba (1 unidade) ou Maçã (1 unidade)"
+1. IDENTIFICAR REFEIÇÕES:
+   - "Café da manhã", "07:30", "Desjejum" → cafe_manha
+   - "Almoço", "12:00", "12h" → almoco
+   - "Lanche", "15:00", "Lanche da tarde" → lanche_tarde
+   - "Jantar", "19:00", "20:00" → jantar
+   - "Ceia", "22:00", "Antes de dormir" → ceia
 
-   INTERPRETE COMO:
-   "Frutas variadas (80-250g por porção)"
+2. EXTRAIR QUANTIDADES EXATAS:
+   - "Arroz (200g)" → {"item": "Arroz", "quantidade": "200g", "vezes": 1}
+   - "2 ovos" → {"item": "Ovos", "quantidade": "2 unidades", "vezes": 1}
+   - "1 pote de iogurte" → {"item": "Iogurte", "quantidade": "1 pote", "vezes": 1}
+   - "150g de frango" → {"item": "Frango", "quantidade": "150g", "vezes": 1}
 
-   Outros exemplos de consolidação:
-   - Muitas carnes → "Proteína animal (frango/carne/peixe - 130-180g)"
-   - Muitos vegetais → "Vegetais variados (tomate, cenoura, pepino, etc - mínimo 80g)"
-   - Muitos pães → "Pães (francês ou integral)"
+3. CONSOLIDAR OPÇÕES (quando houver "ou"):
+   - "Frango (150g) ou Carne (140g) ou Peixe (180g)"
+     → {"item": "Proteina (frango/carne/peixe)", "quantidade": "150g", "vezes": 1}
+   - "Banana ou Maçã ou Laranja (1 unidade)"
+     → {"item": "Fruta variada", "quantidade": "1 unidade", "vezes": 1}
+   - "Arroz (200g) ou Batata (300g)"
+     → {"item": "Carboidrato (arroz/batata)", "quantidade": "200g", "vezes": 1}
 
-3. CAPTURA DE FIXOS (itens que SEMPRE vão na lista):
-   - Arroz, feijão, macarrão → FIXO (se mencionar quantidade, extraia)
-   - Ovos → FIXO (quantidade: "2 unidades", "4 unidades", etc)
-   - Laticínios → FIXO ("Iogurte desnatado", "Leite desnatado", "Queijo")
-   - Pães → FIXO (consolidar "pão francês ou integral")
-   - Proteínas → FIXO consolidado
-   - Whey Protein → FIXO (se tiver quantidade, extraia: "20g", "40g")
-   - Azeite/óleo → FIXO (quantidade: "1 colher de sobremesa")
-   - Requeijão/creme de ricota → FIXO
-   - "Folhas à vontade" → FIXO (mencionar)
-   - "Vegetais" (quando há descrição) → FIXO consolidado
+4. DETECÇÃO DE PERÍODO:
+   - "Todos os dias" ou horários específicos → dias=1 (multiplicar por 7)
+   - "Segunda", "Terça", dias da semana → dias=7 (já é semanal)
 
-4. DETECÇÃO DE PERÍODO (CRÍTICO):
-   - Se menciona "Todos os dias" → dias=1 (dieta é para 1 dia, será multiplicada por 7)
-   - Se menciona "SEG", "TER", "QUA" ou "segunda", "terça" → dias=7 (já é semana completa)
-   - Se menciona horários (07:30, 12:00, 16:00, 20:00) → dias=1
-   - Padrão: dias=1
+5. NÃO ADICIONAR ESCOLHAS - deixe vazio: "escolhas": []
 
-5. EXTRAÇÃO DE QUANTIDADES:
-   - Formatos: "200: Grama", "(200g)", "200 gramas", "(Grama: 200)"
-   - Sempre extraia e mantenha faixas: "130-180g", "80-250g"
-   - Para frutas: capture faixa (menor a maior quantidade vista)
-   - Para proteínas: capture faixa das carnes
+EXEMPLO COMPLETO:
 
-6. NÃO GERE ESCOLHAS DESNECESSÁRIAS:
-   - NUNCA pergunte sobre frutas (já consolidadas)
-   - NUNCA pergunte sobre carnes (já consolidadas)
-   - APENAS adicione: "Quantas pessoas vão consumir?"
-
-EXEMPLO REAL BASEADO EM PDF PROFISSIONAL:
-
-ENTRADA (texto extraído de PDF):
+ENTRADA:
 "
 Todos os dias
 07:30 - Café da manhã
-• pão francês (1 unidade) ou pão integral (2: fatia)
-• Ovo de galinha (2: Unidade)
-• Queijo minas frescal (30: Grama) ou mussarela (20g)
-• Banana (80: Grama) ou Abacate (50: Grama) ou Abacaxi (150g) ou Uva (105g) ou Morango (245g) ou Melão (230g) ou Kiwi (2 unidades) ou Melancia (230g) ou Mamão (230g) ou Manga (110g) ou Maçã (1 unidade)
-• Iogurte desnatado (1: 1 pote)
-• Whey Protein Concentrado - (20: Grama)
+• Pão francês (1 unidade)
+• Ovo (2 unidades)
+• Queijo minas (30g)
+• Iogurte desnatado (1 pote)
 
 12:00 - Almoço
-• Arroz branco (cozido) (200: Grama) ou Batata inglesa cozida (470: Grama)
-• Peito de frango grelhado/cozido (150g) ou patinho/coxão/filé mignon (140g) ou Tilápia grelhada (180g)
-• Vegetais (mínimo 80g): Tomate, pepino, cenoura, beterraba, brócolis, etc
-• Azeite de oliva extra virgem - (1 colher de sobremesa)
-• Folhas à vontade
+• Arroz (200g)
+• Feijão (100g)
+• Frango grelhado (150g) ou Carne (140g)
+• Salada à vontade
+• Azeite (1 colher)
+
+15:30 - Lanche
+• Fruta (1 unidade)
+• Whey Protein (30g)
+
+19:30 - Jantar
+• Arroz (150g)
+• Peixe (180g) ou Frango (150g)
+• Legumes (100g)
 "
 
-SAÍDA ESPERADA:
+SAÍDA:
 {
-  "fixos": [
-    "Pães (francês ou integral - 1-2 unidades por refeição)",
-    "Ovos (2 unidades por refeição)",
-    "Queijo (minas ou mussarela - 20-30g)",
-    "Frutas variadas (banana, abacaxi, uva, morango, melão, etc - 80-250g por porção)",
-    "Iogurte desnatado (1 pote)",
-    "Whey Protein Concentrado (20-40g)",
-    "Arroz branco ou batata (200g arroz ou 280-470g batata)",
-    "Proteína animal (frango 150g / carne 140g / peixe 180g)",
-    "Vegetais variados (tomate, cenoura, pepino, brócolis, etc - mínimo 80g)",
-    "Azeite de oliva (1 colher de sobremesa)",
-    "Folhas verdes à vontade"
-  ],
-  "escolhas": ["Quantas pessoas vão consumir?"],
-  "dias": 1
+  "refeicoes": {
+    "cafe_manha": [
+      {"item": "Pao frances", "quantidade": "1 unidade", "vezes": 1},
+      {"item": "Ovos", "quantidade": "2 unidades", "vezes": 1},
+      {"item": "Queijo minas", "quantidade": "30g", "vezes": 1},
+      {"item": "Iogurte desnatado", "quantidade": "1 pote", "vezes": 1}
+    ],
+    "almoco": [
+      {"item": "Arroz", "quantidade": "200g", "vezes": 1},
+      {"item": "Feijao", "quantidade": "100g", "vezes": 1},
+      {"item": "Proteina (frango/carne)", "quantidade": "150g", "vezes": 1},
+      {"item": "Salada", "quantidade": "a vontade", "vezes": 1},
+      {"item": "Azeite", "quantidade": "1 colher", "vezes": 1}
+    ],
+    "lanche_tarde": [
+      {"item": "Fruta", "quantidade": "1 unidade", "vezes": 1},
+      {"item": "Whey Protein", "quantidade": "30g", "vezes": 1}
+    ],
+    "jantar": [
+      {"item": "Arroz", "quantidade": "150g", "vezes": 1},
+      {"item": "Proteina (peixe/frango)", "quantidade": "180g", "vezes": 1},
+      {"item": "Legumes", "quantidade": "100g", "vezes": 1}
+    ]
+  },
+  "dias": 1,
+  "escolhas": []
 }
 
-VALIDAÇÃO FINAL:
-- Mínimo 5 itens fixos (se tiver menos, a dieta está incompleta - revise)
-- Array "escolhas" deve ter APENAS 1 pergunta
-- Se ver "Todos os dias" → dias=1 SEMPRE
-- NUNCA retorne fixos=[] vazio (isso é erro crítico)
-
-FORMATO OBRIGATÓRIO:
-{
-  "fixos": ["lista consolidada com quantidades"],
-  "escolhas": ["Quantas pessoas vão consumir?"],
-  "dias": 1 ou 7
-}
+⚠️ IMPORTANTE:
+- Se não conseguir identificar refeições separadas, coloque tudo em "almoco"
+- Sempre extraia quantidades numéricas quando possível
+- Use "a vontade" para itens sem quantidade definida
+- NUNCA retorne refeicoes vazio
 """
 
 # 2️⃣ Conversa humana - FLUIDA E RÁPIDA
@@ -178,267 +184,149 @@ Bot: "Quer produtos integrais?"
 SEJA RÁPIDO, AMIGÁVEL E PRÁTICO!
 """
 
-# 3️⃣ Lista final de compras
+# 3️⃣ Lista final de compras - CÁLCULO POR REFEIÇÃO
 SYSTEM_COMPRA = """
-Você é um assistente de compras de supermercado EXPERIENTE.
+Você é um assistente de compras EXPERIENTE que calcula quantidades PRECISAS.
 
-Receberá uma dieta FINAL (sem escolhas pendentes).
-Sua tarefa é gerar uma lista de compras REALISTA E PRECISA.
+🚨 FORMATO DE SAÍDA OBRIGATÓRIO:
+Retorne APENAS um array JSON: [{"nome": "...", "quantidade": "...", "motivo": "..."}]
+NÃO adicione texto, markdown ou explicações. APENAS o JSON.
 
-🚨 FORMATO DE SAÍDA OBRIGATÓRIO (CRÍTICO):
-- Retorne APENAS um array JSON puro: [{"nome": "...", "quantidade": "...", "motivo": "..."}]
-- NÃO adicione texto antes ou depois do JSON
-- NÃO use markdown (### ou **bold**)
-- NÃO escreva "Lista de Compras:" ou explicações
-- APENAS o array JSON, nada mais
+📊 MÉTODO DE CÁLCULO POR REFEIÇÃO (CRÍTICO):
 
-EXEMPLO DE RESPOSTA CORRETA:
+A dieta virá estruturada por refeições. Você DEVE:
+
+1️⃣ PASSO 1 - SOMAR QUANTIDADES DIÁRIAS:
+   Para CADA alimento, some as quantidades de TODAS as refeições em que aparece.
+
+   Exemplo - Arroz aparece em 2 refeições:
+   - Almoço: 200g
+   - Jantar: 150g
+   - TOTAL DIÁRIO: 200g + 150g = 350g/dia
+
+   Exemplo - Ovos aparecem em 1 refeição:
+   - Café da manhã: 2 unidades
+   - TOTAL DIÁRIO: 2 unidades/dia
+
+   Exemplo - Proteína aparece em 2 refeições:
+   - Almoço: 150g (frango)
+   - Jantar: 180g (peixe)
+   - TOTAL DIÁRIO: 150g + 180g = 330g/dia
+
+2️⃣ PASSO 2 - MULTIPLICAR POR 7 DIAS:
+   Se "dias": 1 → multiplicar por 7
+   Se "dias": 7 → já é semanal, não multiplicar
+
+   Arroz: 350g/dia × 7 = 2450g = 2.45kg
+   Ovos: 2/dia × 7 = 14 unidades
+   Proteína: 330g/dia × 7 = 2310g = 2.31kg
+
+3️⃣ PASSO 3 - MULTIPLICAR POR PESSOAS:
+   Use o campo "pessoas" (padrão: 1)
+
+   Para 2 pessoas:
+   Arroz: 2.45kg × 2 = 4.9kg
+   Ovos: 14 × 2 = 28 unidades
+   Proteína: 2.31kg × 2 = 4.62kg
+
+4️⃣ PASSO 4 - ARREDONDAR PARA UNIDADES DE MERCADO:
+   - Arroz/Feijão/Macarrão: 1kg, 2kg, 3kg, 5kg
+   - Carnes: 500g, 1kg, 1.5kg, 2kg, 2.5kg, 3kg
+   - Ovos: 6 un (meia dúzia), 12 un (1 dúzia), 24 un (2 dúzias), 30 un (bandeja)
+   - Iogurte: unidades (6, 7, 8, 12 potes)
+   - Pão francês: unidades (7, 14, 21)
+   - Pão de forma: pacotes (1, 2)
+   - Frutas: kg ou unidades (7, 14 bananas)
+   - Queijo: 150g, 200g, 300g, 400g
+   - Azeite: 250ml, 500ml, 1L
+
+   4.9kg arroz → 5kg
+   28 ovos → 2.5 dúzias → 3 dúzias (36)
+   4.62kg proteína → 5kg (dividir entre tipos)
+
+📋 UNIDADES DE MERCADO OBRIGATÓRIAS:
+- Iogurte → UNIDADES/POTES (ex: "7 potes") NUNCA litros
+- Ovos → DÚZIAS (ex: "3 dúzias")
+- Pão francês → UNIDADES (ex: "14 unidades")
+- Pão de forma → PACOTES (ex: "2 pacotes")
+- Queijo → GRAMAS (ex: "300g")
+- Frutas → KG ou UNIDADES (ex: "2kg" ou "14 bananas")
+- Whey Protein → POTE ou SACHÊS (se não tiver em casa)
+
+⚠️ REGRAS ESPECIAIS:
+
+1. ALIMENTOS EM CASA:
+   Se existir "alimentos_em_casa", NÃO inclua esses itens.
+
+2. PREFERÊNCIAS:
+   - "preferencia_proteina": "frango" → só frango
+   - "preferencia_proteina": "variado" → dividir entre tipos
+   - "preferencia_carboidrato": igual lógica
+   - "preferencia_frutas": respeitar
+
+3. VALIDAÇÃO (quantidades razoáveis para 1 pessoa/semana):
+   - Arroz: 1-2kg ✓
+   - Feijão: 500g-1kg ✓
+   - Frango: 1-2kg ✓
+   - Ovos: 1-2 dúzias ✓
+   - Iogurte: 7 potes ✓
+   - Frutas: 2-3kg ✓
+
+EXEMPLO COMPLETO:
+
+ENTRADA:
+{
+  "refeicoes": {
+    "cafe_manha": [
+      {"item": "Ovos", "quantidade": "2 unidades"},
+      {"item": "Pao frances", "quantidade": "1 unidade"},
+      {"item": "Iogurte", "quantidade": "1 pote"}
+    ],
+    "almoco": [
+      {"item": "Arroz", "quantidade": "200g"},
+      {"item": "Feijao", "quantidade": "80g"},
+      {"item": "Frango", "quantidade": "150g"}
+    ],
+    "lanche_tarde": [
+      {"item": "Fruta", "quantidade": "1 unidade"}
+    ],
+    "jantar": [
+      {"item": "Arroz", "quantidade": "150g"},
+      {"item": "Peixe", "quantidade": "180g"}
+    ]
+  },
+  "dias": 1,
+  "pessoas": 2
+}
+
+CÁLCULO:
+- Ovos: 2/dia × 7 × 2 pessoas = 28 → 3 dúzias
+- Pão: 1/dia × 7 × 2 = 14 unidades
+- Iogurte: 1/dia × 7 × 2 = 14 potes
+- Arroz: (200g + 150g)/dia × 7 × 2 = 4900g → 5kg
+- Feijão: 80g/dia × 7 × 2 = 1120g → 1.5kg
+- Frango: 150g/dia × 7 × 2 = 2100g → 2.5kg
+- Fruta: 1/dia × 7 × 2 = 14 unidades
+- Peixe: 180g/dia × 7 × 2 = 2520g → 2.5kg
+
+SAÍDA:
 [
-  {"nome": "Arroz integral", "quantidade": "3kg", "motivo": "3 pessoas/semana"},
-  {"nome": "Frango", "quantidade": "2kg", "motivo": "3 pessoas/semana"}
+  {"nome": "Ovos", "quantidade": "3 duzias", "motivo": "cafe manha (2/dia x 7 x 2)"},
+  {"nome": "Pao frances", "quantidade": "14 unidades", "motivo": "cafe manha (1/dia x 7 x 2)"},
+  {"nome": "Iogurte natural", "quantidade": "14 potes", "motivo": "cafe manha (1/dia x 7 x 2)"},
+  {"nome": "Arroz", "quantidade": "5kg", "motivo": "almoco+jantar (350g/dia x 7 x 2)"},
+  {"nome": "Feijao", "quantidade": "1.5kg", "motivo": "almoco (80g/dia x 7 x 2)"},
+  {"nome": "Frango (peito)", "quantidade": "2.5kg", "motivo": "almoco (150g/dia x 7 x 2)"},
+  {"nome": "Frutas variadas", "quantidade": "14 unidades", "motivo": "lanche (1/dia x 7 x 2)"},
+  {"nome": "Peixe (tilapia)", "quantidade": "2.5kg", "motivo": "jantar (180g/dia x 7 x 2)"}
 ]
 
-EXEMPLO DE RESPOSTA INCORRETA (NÃO FAÇA ISSO):
-Aqui está a lista de compras:
-1. **Arroz integral**
-   - Quantidade: 3kg
-   ...
-
-📊 TABELA DE CONSUMO MÉDIO SEMANAL (1 pessoa, 7 dias):
-- Arroz: 1 pacote (1kg)
-- Feijão: 1 pacote (500g)
-- Macarrão: 1 pacote (500g)
-- Frango/Carne: 1-1.5kg
-- Ovos: 1 dúzia (12 unidades)
-- Leite: 1 caixa (1L) ou 6 unidades de leite em pó
-- Pão de forma: 1 pacote
-- Pão francês: 7-14 unidades
-- Frutas: 2-3kg ou unidades (ex: 7 bananas, 7 maçãs)
-- Verduras/Legumes: 1-2kg
-- Iogurte: 6-7 unidades (potes individuais)
-- Queijo: 1 pacote (150-200g) ou fatias (8-10 fatias)
-- Azeite: 1 garrafa (500ml)
-- Café: 1 pacote (250g)
-- Whey Protein: 1 pote (se não tiver em casa)
-
-⚠️ UNIDADES DE MERCADO OBRIGATÓRIAS (CRÍTICO):
-- Iogurte → SEMPRE em UNIDADES (ex: "6 unidades", "7 potes") NUNCA em litros
-- Queijo → em GRAMAS ou FATIAS (ex: "200g" ou "1 pacote fatiado")
-- Ovos → em DÚZIAS (ex: "1 dúzia", "2 dúzias")
-- Pão de forma → em PACOTES (ex: "1 pacote")
-- Pão francês → em UNIDADES (ex: "14 unidades")
-- Leite → em LITROS ou CAIXAS (ex: "2L" ou "2 caixas")
-- Arroz/Feijão/Macarrão → em KG ou PACOTES (ex: "2kg" ou "2 pacotes de 1kg")
-- Frutas → em KG ou UNIDADES (ex: "1kg de banana" ou "7 bananas")
-- Azeite/Óleo → em ML ou GARRAFAS (ex: "500ml" ou "1 garrafa")
-
-⚠️ REGRAS CRÍTICAS:
-
-1. CÁLCULO DE QUANTIDADE (LEIA COM ATENÇÃO):
-
-   🚨 PASSO A PASSO OBRIGATÓRIO:
-
-   ETAPA 1 - Identificar frequência:
-   - Se fixo menciona "por refeição" → conte QUANTAS vezes aparece na semana
-   - Exemplo: "2 ovos por refeição" e aparece no café (7x) + lanche (7x) = 14 refeições/semana
-   - Cálculo: 2 ovos × 14 refeições = 28 ovos → 3 dúzias (arredondado)
-
-   ETAPA 2 - Multiplicar por dias:
-   - Se campo "dias"=1 → Multiplique por 7 (dieta é diária, precisa de semana completa)
-   - Se campo "dias"=7 → Use quantidade direta (já é semanal)
-
-   ETAPA 3 - Multiplicar por pessoas:
-   - SEMPRE multiplique pelo campo "pessoas"
-
-   ETAPA 4 - Arredondar PARA CIMA:
-   - 1.05kg → 1.5kg (NUNCA deixe .05, .1, .2, .3, .4)
-   - 1.4kg → 1.5kg
-   - 1.75kg → 2kg
-   - 2.1kg → 2.5kg
-   - 28 ovos → 3 dúzias (36 ovos)
-
-   EXEMPLOS PRÁTICOS:
-
-   ✅ Arroz 200g/refeição, 1 refeição/dia, 7 dias, 1 pessoa:
-   → 200g × 7 dias = 1400g = 1.4kg → ARREDONDAR 1.5kg
-
-   ✅ Ovos 4 unidades/refeição, 1 refeição/dia, 7 dias, 1 pessoa:
-   → 4 × 7 = 28 ovos → 28÷12 = 2.33 dúzias → ARREDONDAR 3 dúzias
-
-   ✅ Pão 2 unidades/dia, 7 dias, 1 pessoa:
-   → 2 × 7 = 14 unidades → converter para PACOTES (1 pacote ≈ 6 pães) → 3 pacotes
-
-   ✅ Frango 150g/refeição, 1 refeição/dia, 7 dias, 1 pessoa:
-   → 150g × 7 = 1050g = 1.05kg → ARREDONDAR 1.5kg
-
-   ⚠️ UNIDADES OBRIGATÓRIAS:
-   - Ovos → SEMPRE em dúzias (nunca "28 unidades", use "3 dúzias")
-   - Pães → SEMPRE em pacotes (nunca "14 unidades", use "2-3 pacotes")
-   - Arroz/Carne → kg (arredondado: 1.5kg, 2kg, 2.5kg, 3kg, etc)
-   - Leite → litros
-   - Verduras/Frutas → kg ou unidades
-
-2. VALIDAÇÃO INTELIGENTE:
-   - ❌ NUNCA gere quantidades absurdas (ex: 30kg arroz para 2 pessoas)
-   - ✅ Arroz para 3 pessoas/7 dias: 2-3kg (correto)
-   - ✅ Feijão para 3 pessoas/7 dias: 1.2-1.8kg (correto)
-   - ✅ Frango para 3 pessoas/7 dias: 3-4.5kg (correto)
-
-3. REMOÇÃO DE ALIMENTOS EM CASA (CRÍTICO):
-   ⚠️ Se o campo "alimentos_em_casa" existir na dieta:
-   - NÃO inclua esses itens na lista de compras
-   - Exemplo: Se "alimentos_em_casa": ["Whey Protein", "Azeite"]
-     → NÃO gere item "Whey Protein" e NÃO gere item "Azeite"
-   - Seja inteligente: "Whey" ou "Whey Protein" ou "whey" → todos são o mesmo item
-
-4. PREFERÊNCIA DE PROTEÍNA (IMPORTANTE):
-   ⚠️ Se o campo "preferencia_proteina" existir:
-   - "frango" → Gere APENAS frango
-   - "carne" → Gere APENAS carne vermelha (patinho, alcatra, etc)
-   - "peixe" → Gere APENAS peixe (tilápia, pescada, etc)
-   - "variado" → Gere MIX (ex: "2kg frango + 1.5kg carne")
-   - Se NÃO tiver preferência → use frango como padrão
-
-5. PREFERÊNCIA DE CARBOIDRATO:
-   ⚠️ Se o campo "preferencia_carboidrato" existir:
-   - "arroz" → Gere APENAS arroz
-   - "batata" → Gere APENAS batata
-   - "macarrao" ou "macarrão" → Gere APENAS macarrão
-   - "variado" → Gere MIX (ex: "2kg arroz + 1kg batata")
-   - Se NÃO tiver preferência → use arroz como padrão
-
-6. PREFERÊNCIA DE FRUTAS:
-   ⚠️ Se o campo "preferencia_frutas" existir:
-   - Se mencionar frutas específicas (ex: "banana, maçã") → Gere APENAS essas
-   - Se mencionar "variado (exceto X, Y)" ou "não gosta de X" → Gere mix MAS remova X e Y da lista
-   - "variado" → Gere mix de frutas da estação
-   - Se NÃO tiver preferência → use frutas variadas
-
-   EXEMPLO: "preferencia_frutas": "variado (exceto kiwi e melão)"
-   → Gere frutas como banana, maçã, uva, morango MAS NÃO GERE kiwi nem melão
-
-7. PREFERÊNCIA DE VEGETAIS:
-   ⚠️ Se o campo "preferencia_vegetais" existir:
-   - Se mencionar vegetais específicos → Gere APENAS esses
-   - Se mencionar "exceto X" ou "não gosto de X" → Gere mix MAS remova X da lista
-   - "variado" → Gere mix comum (tomate, cenoura, pepino, brócolis)
-
-   EXEMPLO: "preferencia_vegetais": "variado (exceto brócolis)"
-   → Gere vegetais como tomate, cenoura, pepino MAS NÃO GERE brócolis
-
-8. CAPTURA COMPLETA:
-   - Inclua TODOS os alimentos mencionados na dieta
-   - Exceto os que estão em "alimentos_em_casa"
-
-9. FORMATO:
-   - Use unidades de mercado: kg, litro, dúzia, pacote, unidade
-   - NÃO use preços
-   - Motivo CONCISO (máximo 50 caracteres)
-   - NOMES CORRETOS: Use nomes simples e claros (ex: "Pão integral", "Ovos", "Frango")
-   - NÃO use abreviações estranhas ou caracteres especiais no nome
-
-EXEMPLO 1 - Sem restrições:
-Dieta: {
-  "fixos": ["Arroz (200g/refeição)", "Frango (150g/refeição)", "Ovos (2 unidades/refeição)"],
-  "pessoas": 3,
-  "dias": 1
-}
-Cálculo:
-- Arroz: 200g × 7 dias × 3 pessoas = 4200g = 4.2kg → 4.5kg
-- Frango: 150g × 7 dias × 3 pessoas = 3150g = 3.15kg → 3.5kg
-- Ovos: 2 × 7 dias × 3 pessoas = 42 ovos = 3.5 dúzias → 4 dúzias
-
-Lista: [
-  {"nome": "Arroz integral", "quantidade": "4.5kg", "motivo": "3 pessoas/semana (200g/dia)"},
-  {"nome": "Frango (peito)", "quantidade": "3.5kg", "motivo": "3 pessoas/semana (150g/dia)"},
-  {"nome": "Ovos", "quantidade": "4 dúzias", "motivo": "3 pessoas/semana (2 ovos/dia)"}
-]
-
-EXEMPLO 2 - Com alimentos em casa:
-Dieta: {
-  "fixos": ["Arroz (150g/dia)", "Whey Protein", "Azeite", "Ovos (2/dia)"],
-  "pessoas": 2,
-  "dias": 1,
-  "alimentos_em_casa": ["Whey Protein", "Azeite"]
-}
-Cálculo:
-- Arroz: 150g × 7 dias × 2 pessoas = 2100g = 2.1kg → 2.5kg
-- Ovos: 2 × 7 dias × 2 pessoas = 28 ovos = 2.33 dúzias → 3 dúzias
-
-Lista: [
-  {"nome": "Arroz integral", "quantidade": "2.5kg", "motivo": "2 pessoas/semana (150g/dia)"},
-  {"nome": "Ovos", "quantidade": "3 dúzias", "motivo": "2 pessoas/semana (2 ovos/dia)"}
-]
-⚠️ WHEY E AZEITE NÃO APARECEM (estão em alimentos_em_casa)
-
-EXEMPLO 3 - Pães e ovos (unidades especiais):
-Dieta: {
-  "fixos": ["Pães (2 unidades/dia)", "Ovos (4 unidades/dia)"],
-  "pessoas": 1,
-  "dias": 1
-}
-Cálculo:
-- Pães: 2 × 7 dias = 14 pães → 2-3 pacotes (pacote tem ~6 pães)
-- Ovos: 4 × 7 dias = 28 ovos → 3 dúzias
-
-Lista: [
-  {"nome": "Pão integral", "quantidade": "3 pacotes", "motivo": "1 pessoa/semana (2 pães/dia)"},
-  {"nome": "Ovos", "quantidade": "3 dúzias", "motivo": "1 pessoa/semana (4 ovos/dia)"}
-]
-
-EXEMPLO 4 - Com preferência de proteína variada:
-Dieta: {
-  "fixos": ["Proteína animal (frango 150g/dia)"],
-  "pessoas": 3,
-  "dias": 1,
-  "preferencia_proteina": "variado"
-}
-Cálculo:
-- Total proteína: 150g × 7 dias × 3 pessoas = 3150g = 3.15kg → 3.5kg
-- Dividir em mix: 50% frango (1.75kg → 2kg) + 30% carne (1.05kg → 1.5kg) + 20% peixe (700g → 1kg)
-
-Lista: [
-  {"nome": "Frango (peito)", "quantidade": "2kg", "motivo": "3 pessoas/semana (mix variado)"},
-  {"nome": "Carne vermelha (patinho)", "quantidade": "1.5kg", "motivo": "3 pessoas/semana (mix variado)"},
-  {"nome": "Peixe (tilapia)", "quantidade": "1kg", "motivo": "3 pessoas/semana (mix variado)"}
-]
-
-EXEMPLO 5 - Com preferências múltiplas:
-Dieta: {
-  "fixos": ["Arroz (200g/dia)", "Frango (150g/dia)", "Frutas (250g/dia)", "Vegetais (100g/dia)"],
-  "pessoas": 2,
-  "dias": 1,
-  "preferencia_proteina": "frango",
-  "preferencia_carboidrato": "arroz",
-  "preferencia_frutas": "banana, maçã",
-  "preferencia_vegetais": "variado"
-}
-Cálculo:
-- Arroz: 200g × 7 × 2 = 2800g = 2.8kg → 3kg
-- Frango: 150g × 7 × 2 = 2100g = 2.1kg → 2.5kg
-- Banana: 125g × 7 × 2 = 1750g = 1.75kg → 2kg (metade das frutas)
-- Maçã: 125g × 7 × 2 = 1750g = 1.75kg → 2kg (metade das frutas)
-- Vegetais: 100g × 7 × 2 = 1400g = 1.4kg → 1.5kg
-
-Lista: [
-  {"nome": "Arroz integral", "quantidade": "3kg", "motivo": "2 pessoas/semana (200g/dia)"},
-  {"nome": "Frango (peito)", "quantidade": "2.5kg", "motivo": "2 pessoas/semana (150g/dia)"},
-  {"nome": "Banana", "quantidade": "2kg", "motivo": "2 pessoas/semana (preferencia)"},
-  {"nome": "Maçã", "quantidade": "2kg", "motivo": "2 pessoas/semana (preferencia)"},
-  {"nome": "Vegetais variados", "quantidade": "1.5kg", "motivo": "2 pessoas/semana (100g/dia)"}
-]
-
-⚠️ IMPORTANTE:
-- Motivo CURTO e direto (max 50 chars)
-- SEMPRE arredonde PARA CIMA
-- Mencione "pessoas/semana"
-- Nomes LIMPOS e corretos (sem typos)
-
-🚨 LEMBRETE FINAL - FORMATO DE SAÍDA:
-Retorne APENAS o array JSON sem nenhum texto adicional. Exemplo:
-[
-  {"nome": "Item", "quantidade": "1kg", "motivo": "Razão"}
-]
+🚨 LEMBRE-SE:
+1. Some quantidades de TODAS as refeições onde o item aparece
+2. Multiplique por 7 dias (se dias=1)
+3. Multiplique por número de pessoas
+4. Arredonde para unidades de mercado
+5. Retorne APENAS o JSON, sem texto extra
 """
 
 def interpretar_dieta(texto: str) -> dict:
@@ -482,15 +370,34 @@ def interpretar_dieta(texto: str) -> dict:
 
     try:
         resultado = json.loads(resposta_limpa)
+
+        # Converter nova estrutura (refeicoes) para manter compatibilidade com "fixos"
+        if "refeicoes" in resultado and "fixos" not in resultado:
+            fixos = []
+            refeicoes = resultado.get("refeicoes", {})
+            for refeicao, itens in refeicoes.items():
+                for item in itens:
+                    nome = item.get("item", "")
+                    qtd = item.get("quantidade", "")
+                    descricao = f"{nome} ({qtd}) - {refeicao}"
+                    if descricao not in fixos:
+                        fixos.append(descricao)
+            resultado["fixos"] = fixos
+            resultado["escolhas"] = resultado.get("escolhas", [])
+
         print(f"[AI_PARSER] JSON parseado com sucesso:")
-        print(f"  - {len(resultado.get('fixos', []))} itens fixos")
+        if "refeicoes" in resultado:
+            total_itens = sum(len(itens) for itens in resultado.get("refeicoes", {}).values())
+            print(f"  - {total_itens} itens em {len(resultado.get('refeicoes', {}))} refeicoes")
+        else:
+            print(f"  - {len(resultado.get('fixos', []))} itens fixos")
         print(f"  - {len(resultado.get('escolhas', []))} escolhas")
-        print(f"  - Dias: {resultado.get('dias', 'não definido')}\n")
+        print(f"  - Dias: {resultado.get('dias', 'nao definido')}\n")
         return resultado
     except Exception as e:
         print(f"[AI_PARSER ERRO] Falha ao parsear JSON: {e}")
-        print(f"[AI_PARSER ERRO] Conteúdo recebido: {resposta_ai[:500]}\n")
-        return {"fixos": [], "escolhas": [], "dias": 1}
+        print(f"[AI_PARSER ERRO] Conteudo recebido: {resposta_ai[:500]}\n")
+        return {"fixos": [], "escolhas": [], "dias": 1, "refeicoes": {}}
 
 
 def conversar_com_usuario(dieta: dict, historico: list) -> str:
@@ -515,9 +422,22 @@ def conversar_com_usuario(dieta: dict, historico: list) -> str:
 def gerar_lista_compras(dieta_final: dict):
     print(f"\n[GERAR_LISTA] Gerando lista de compras...")
     print(f"[GERAR_LISTA] Dieta recebida:")
-    print(f"  - Fixos: {len(dieta_final.get('fixos', []))} itens")
-    print(f"  - Pessoas: {dieta_final.get('pessoas', 'não definido')}")
-    print(f"  - Dias: {dieta_final.get('dias', 'não definido')}")
+
+    # Mostrar estrutura de refeicoes se existir
+    if "refeicoes" in dieta_final:
+        refeicoes = dieta_final.get("refeicoes", {})
+        print(f"  - Refeicoes: {len(refeicoes)}")
+        for refeicao, itens in refeicoes.items():
+            print(f"    - {refeicao}: {len(itens)} itens")
+            for item in itens[:3]:  # Mostrar primeiros 3
+                print(f"      * {item.get('item', '?')}: {item.get('quantidade', '?')}")
+            if len(itens) > 3:
+                print(f"      * ... e mais {len(itens) - 3} itens")
+    else:
+        print(f"  - Fixos: {len(dieta_final.get('fixos', []))} itens")
+
+    print(f"  - Pessoas: {dieta_final.get('pessoas', 1)}")
+    print(f"  - Dias: {dieta_final.get('dias', 1)}")
     print(f"  - Alimentos em casa: {dieta_final.get('alimentos_em_casa', [])}")
     print(f"  - Preferência proteína: {dieta_final.get('preferencia_proteina', 'não definido')}")
 

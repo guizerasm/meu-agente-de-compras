@@ -713,10 +713,16 @@
     <div id="lista-mobile">
       <div id="lista-mobile-header">
         <span>Lista de Compras</span>
-        <button id="baixarPdfMobile" class="btn btn-primary" style="height:38px;padding:0 16px;font-size:13px;">PDF</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="baixarPdfMobile" class="btn btn-primary" style="height:36px;padding:0 14px;font-size:13px;">PDF</button>
+          <button id="fecharListaMobile" style="width:36px;height:36px;border-radius:50%;border:none;background:var(--gray-200);color:var(--gray-600);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;" title="Fechar lista">×</button>
+        </div>
       </div>
       <div id="lista-mobile-content"></div>
     </div>
+
+    <!-- Botao para mostrar lista (quando fechada) -->
+    <button id="mostrarListaBtn" style="display:none;position:fixed;bottom:100px;right:16px;width:56px;height:56px;border-radius:50%;border:none;background:var(--primary);color:white;cursor:pointer;font-size:24px;box-shadow:0 4px 12px rgba(0,0,0,0.2);z-index:100;">📋</button>
 
     <footer>
       <div class="input-row">
@@ -750,6 +756,8 @@
   const emptyState = document.getElementById("empty-state");
   const baixarPdfDesktop = document.getElementById("baixarPdfDesktop");
   const baixarPdfMobile = document.getElementById("baixarPdfMobile");
+  const fecharListaMobile = document.getElementById("fecharListaMobile");
+  const mostrarListaBtn = document.getElementById("mostrarListaBtn");
 
   const API_URL = window.location.origin;
   let dieta = null;
@@ -1135,6 +1143,19 @@
 
   baixarPdfDesktop.onclick = baixarPdf;
   baixarPdfMobile.onclick = baixarPdf;
+
+  // Fechar/Abrir lista mobile
+  fecharListaMobile.onclick = () => {
+    listaMobile.classList.remove("visible");
+    if (listaFinal) {
+      mostrarListaBtn.style.display = "flex";
+    }
+  };
+
+  mostrarListaBtn.onclick = () => {
+    listaMobile.classList.add("visible");
+    mostrarListaBtn.style.display = "none";
+  };
 
   // Auto-resize textarea
   input.oninput = () => {
