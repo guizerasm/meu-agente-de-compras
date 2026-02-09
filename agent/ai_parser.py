@@ -229,15 +229,24 @@ def extrair_numero_quantidade(qtd_str: str) -> float:
 
 def consolidar_substituicoes(dieta: dict) -> dict:
     """
-    Pós-processamento: quando há múltiplas opções de proteína/carboidrato/fruta,
-    mantém apenas o PRIMEIRO item (o principal) com sua quantidade correta.
+    Pós-processamento:
+    1. REMOVE refeições marcadas como "substituição" (são alternativas, não principais)
+    2. Quando há múltiplas opções de proteína/carboidrato/fruta na mesma refeição,
+       mantém apenas o PRIMEIRO item (o principal) com sua quantidade correta.
 
     Exemplo:
     - "Frango 150g OU Carne 140g OU Peixe 180g"
     - Resultado: Frango 150g (o primeiro, é o padrão)
     - Se usuário quiser trocar, ele pede na etapa de ajustes
     """
-    # Categorias de substituição comuns
+    # Palavras que indicam que a refeição é uma SUBSTITUIÇÃO (ignorar)
+    PALAVRAS_SUBSTITUICAO = [
+        "substituição", "substituicao", "substitui", "alternativa",
+        "opção", "opcao", "opcional", "troca", "trocar",
+        "substituir", "ou ", "replace", "alternative"
+    ]
+
+    # Categorias de substituição de alimentos
     PROTEINAS = ["frango", "carne", "peixe", "tilapia", "filé", "file", "bife",
                  "alcatra", "patinho", "acém", "acem", "costela", "lombo",
                  "peito de frango", "coxa", "sobrecoxa", "salmão", "salmon", "atum",
@@ -253,6 +262,20 @@ def consolidar_substituicoes(dieta: dict) -> dict:
         return dieta
 
     print(f"\n[CONSOLIDAR] Verificando substituições...")
+
+    # PASSO 1: Filtrar refeições que são substituições
+    refeicoes_principais = {}
+    for nome_refeicao, itens in refeicoes.items():
+        nome_lower = nome_refeicao.lower()
+        eh_substituicao = any(palavra in nome_lower for palavra in PALAVRAS_SUBSTITUICAO)
+
+        if eh_substituicao:
+            print(f"  - IGNORANDO refeição '{nome_refeicao}' (é substituição)")
+        else:
+            refeicoes_principais[nome_refeicao] = itens
+
+    # Atualizar para usar apenas refeições principais
+    refeicoes = refeicoes_principais
 
     novas_refeicoes = {}
 
