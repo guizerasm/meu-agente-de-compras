@@ -648,9 +648,6 @@
         width: 48px;
       }
 
-      .btn-text {
-        display: none;
-      }
     }
 
     @media (max-width: 400px) {
@@ -726,7 +723,7 @@
         <textarea id="input" rows="1" placeholder="Cole sua dieta aqui ou envie um PDF..."></textarea>
         <div class="btn-group">
           <button class="btn btn-secondary" id="pdfBtn" title="Enviar PDF">
-            <span class="btn-text">PDF</span>
+            Enviar PDF
           </button>
           <input type="file" id="pdf" accept="application/pdf" />
           <button class="btn btn-primary btn-icon" id="send" title="Enviar">
@@ -983,6 +980,10 @@
       if (data.resposta.includes("[LISTA_PRONTA]")) {
         setStatus("Gerando lista...", "loading");
         await gerarListaAutomatica();
+      } else if (fase === "ajustar") {
+        // Usuario esta ajustando a lista - regenerar
+        setStatus("Atualizando lista...", "loading");
+        await gerarListaAutomatica();
       } else {
         setStatus("Conversando", "loading");
       }
@@ -1015,15 +1016,67 @@
       }
 
       renderLista(listaFinal);
-      addMessage("Pronto! Sua lista de compras esta na lateral (desktop) ou acima (mobile). Pode baixar o PDF!");
+
+      if (fase === "ajustar") {
+        // Estava ajustando - mostrar mensagem de atualizacao
+        addMessage("Lista atualizada! Quer ajustar mais alguma coisa?");
+        mostrarOpcaoAjustar();
+      } else {
+        // Primeira geracao
+        addMessage("Pronto! Sua lista de compras esta na lateral (desktop) ou acima (mobile). Pode baixar o PDF!");
+        mostrarOpcaoAjustar();
+      }
+
       setStatus("Lista pronta!", "ready");
-      fase = "concluido";
+      fase = "ajustar";
 
     } catch (e) {
       hideTyping();
       addMessage("Erro ao gerar lista: " + e.message);
       setStatus("Erro", "");
     }
+  }
+
+  function mostrarOpcaoAjustar() {
+    const row = document.createElement("div");
+    row.className = "msg-row bot";
+    row.id = "ajuste-opcao";
+
+    const avatar = document.createElement("div");
+    avatar.className = "avatar";
+    avatar.textContent = "🤖";
+
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg";
+    msgDiv.innerHTML = `
+      <div style="margin-bottom:12px">Quer ajustar alguma coisa na lista?</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="continuarConversa()" style="padding:10px 16px;background:var(--primary);color:white;border:none;border-radius:20px;font-size:13px;cursor:pointer;font-weight:600">Sim, ajustar</button>
+        <button onclick="fecharAjuste()" style="padding:10px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:20px;font-size:13px;cursor:pointer;font-weight:600">Nao, esta otimo!</button>
+      </div>
+    `;
+
+    row.appendChild(avatar);
+    row.appendChild(msgDiv);
+    chat.appendChild(row);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function continuarConversa() {
+    const opcao = document.getElementById("ajuste-opcao");
+    if (opcao) opcao.remove();
+
+    fase = "conversando";
+    addMessage("Claro! Me diz o que quer mudar na lista. Por exemplo:\n- \"Adiciona mais frutas\"\n- \"Remove o peixe\"\n- \"Troca frango por carne\"\n- \"Aumenta a quantidade de arroz\"");
+    input.focus();
+  }
+
+  function fecharAjuste() {
+    const opcao = document.getElementById("ajuste-opcao");
+    if (opcao) opcao.remove();
+
+    addMessage("Perfeito! Boas compras! Se precisar de algo mais, e so enviar uma nova dieta.");
+    fase = "concluido";
   }
 
   async function baixarPdf() {
@@ -1052,6 +1105,13 @@
     if (fase === "tutorial") {
       startChat();
     } else if (fase === "inicial") {
+      enviarDietaInicial();
+    } else if (fase === "concluido") {
+      // Se ja concluiu, comecar nova dieta
+      fase = "inicial";
+      dieta = null;
+      historico = [];
+      listaFinal = null;
       enviarDietaInicial();
     } else {
       enviarMensagemChat();
