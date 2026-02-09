@@ -255,15 +255,28 @@ def consolidar_substituicoes(dieta: dict) -> dict:
     ]
 
     # Categorias de substituição de alimentos
-    PROTEINAS = ["frango", "carne", "peixe", "tilapia", "filé", "file", "bife",
-                 "alcatra", "patinho", "acém", "acem", "costela", "lombo",
-                 "peito de frango", "coxa", "sobrecoxa", "salmão", "salmon", "atum",
-                 "proteina", "proteína"]
-    CARBOIDRATOS = ["arroz", "batata", "macarrão", "macarrao", "massa", "nhoque",
-                    "batata doce", "mandioca", "inhame", "cará", "cara", "carboidrato"]
+    # PRINCIPAIS = itens que devem ser priorizados
+    # ALTERNATIVOS = itens que são opções de substituição (menor prioridade)
+    PROTEINAS_PRINCIPAIS = ["frango", "carne", "peixe", "tilapia", "filé", "file", "bife",
+                            "alcatra", "patinho", "acém", "acem", "costela", "lombo",
+                            "peito de frango", "coxa", "sobrecoxa", "salmão", "salmon", "atum"]
+    PROTEINAS_ALTERNATIVAS = ["omelete", "omelette", "ovos mexidos", "ovo mexido",
+                              "proteina", "proteína"]
+    PROTEINAS = PROTEINAS_PRINCIPAIS + PROTEINAS_ALTERNATIVAS
+
+    CARBOIDRATOS_PRINCIPAIS = ["arroz", "batata", "macarrão", "macarrao", "massa",
+                               "batata doce", "mandioca", "inhame", "cará", "cara"]
+    CARBOIDRATOS_ALTERNATIVOS = ["ao sugo", "espaguete", "penne", "fusilli", "talharim",
+                                 "nhoque", "carboidrato"]
+    CARBOIDRATOS = CARBOIDRATOS_PRINCIPAIS + CARBOIDRATOS_ALTERNATIVOS
     FRUTAS = ["banana", "maçã", "maca", "laranja", "mamão", "mamao", "melão",
               "melao", "melancia", "abacaxi", "manga", "uva", "morango", "kiwi",
               "pera", "pêra", "goiaba", "ameixa", "fruta"]
+
+    # Refeições que são claramente opções (ex: "Opção 1", "Opção 2")
+    PADROES_OPCAO = ["opção 1", "opcao 1", "opção 2", "opcao 2", "opção 3", "opcao 3",
+                     "option 1", "option 2", "option 3",
+                     "dia 1", "dia 2", "dia 3", "dia 4", "dia 5", "dia 6", "dia 7"]
 
     refeicoes = dieta.get("refeicoes", {})
     if not refeicoes:
@@ -271,14 +284,17 @@ def consolidar_substituicoes(dieta: dict) -> dict:
 
     print(f"\n[CONSOLIDAR] Verificando substituições...")
 
-    # PASSO 1: Filtrar refeições que são substituições
+    # PASSO 1: Filtrar refeições que são substituições OU padrões de opção
     refeicoes_principais = {}
     for nome_refeicao, itens in refeicoes.items():
         nome_lower = nome_refeicao.lower()
         eh_substituicao = any(palavra in nome_lower for palavra in PALAVRAS_SUBSTITUICAO)
+        eh_padrao_opcao = any(padrao in nome_lower for padrao in PADROES_OPCAO)
 
         if eh_substituicao:
             print(f"  - IGNORANDO refeição '{nome_refeicao}' (é substituição)")
+        elif eh_padrao_opcao:
+            print(f"  - IGNORANDO refeição '{nome_refeicao}' (é padrão de opção)")
         else:
             refeicoes_principais[nome_refeicao] = itens
 
@@ -322,19 +338,37 @@ def consolidar_substituicoes(dieta: dict) -> dict:
 
         novos_itens = outros_itens.copy()
 
-        # PROTEÍNAS: pegar o PRIMEIRO (o principal)
+        # PROTEÍNAS: priorizar PRINCIPAIS sobre ALTERNATIVOS
         if len(proteinas_encontradas) > 1:
-            primeiro = proteinas_encontradas[0]
-            print(f"  - {nome_refeicao}: {len(proteinas_encontradas)} proteínas → mantendo '{primeiro.get('item')}' ({primeiro.get('quantidade')})")
-            novos_itens.append(primeiro)
+            # Buscar itens principais (frango, carne, peixe, etc.)
+            principais = [p for p in proteinas_encontradas
+                         if any(pp in p.get("item", "").lower() for pp in PROTEINAS_PRINCIPAIS)]
+
+            # Preferir o primeiro PRINCIPAL, se não tiver, pegar primeiro da lista
+            if principais:
+                escolhido = principais[0]
+                print(f"  - {nome_refeicao}: {len(proteinas_encontradas)} proteínas → mantendo PRINCIPAL '{escolhido.get('item')}' ({escolhido.get('quantidade')})")
+            else:
+                escolhido = proteinas_encontradas[0]
+                print(f"  - {nome_refeicao}: {len(proteinas_encontradas)} proteínas → mantendo '{escolhido.get('item')}' ({escolhido.get('quantidade')})")
+            novos_itens.append(escolhido)
         elif len(proteinas_encontradas) == 1:
             novos_itens.append(proteinas_encontradas[0])
 
-        # CARBOIDRATOS: pegar o PRIMEIRO
+        # CARBOIDRATOS: priorizar PRINCIPAIS sobre ALTERNATIVOS
         if len(carboidratos_encontrados) > 1:
-            primeiro = carboidratos_encontrados[0]
-            print(f"  - {nome_refeicao}: {len(carboidratos_encontrados)} carboidratos → mantendo '{primeiro.get('item')}' ({primeiro.get('quantidade')})")
-            novos_itens.append(primeiro)
+            # Buscar itens principais (arroz, batata, macarrão, etc.)
+            principais = [c for c in carboidratos_encontrados
+                         if any(cp in c.get("item", "").lower() for cp in CARBOIDRATOS_PRINCIPAIS)]
+
+            # Preferir o primeiro PRINCIPAL, se não tiver, pegar primeiro da lista
+            if principais:
+                escolhido = principais[0]
+                print(f"  - {nome_refeicao}: {len(carboidratos_encontrados)} carboidratos → mantendo PRINCIPAL '{escolhido.get('item')}' ({escolhido.get('quantidade')})")
+            else:
+                escolhido = carboidratos_encontrados[0]
+                print(f"  - {nome_refeicao}: {len(carboidratos_encontrados)} carboidratos → mantendo '{escolhido.get('item')}' ({escolhido.get('quantidade')})")
+            novos_itens.append(escolhido)
         elif len(carboidratos_encontrados) == 1:
             novos_itens.append(carboidratos_encontrados[0])
 
