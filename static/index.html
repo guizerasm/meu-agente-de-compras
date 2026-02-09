@@ -11,6 +11,10 @@
       box-sizing: border-box;
     }
 
+    :root {
+      --vh: 1vh;
+    }
+
     html {
       height: 100%;
       overflow: hidden;
@@ -22,15 +26,13 @@
       background: #f2f2f2;
       display: grid;
       grid-template-rows: auto 1fr auto;
-      height: 100vh;
-      height: 100dvh; /* Dynamic viewport height para mobile */
+      /* Múltiplos fallbacks para compatibilidade total */
+      height: 100vh; /* Fallback padrão */
+      height: calc(var(--vh, 1vh) * 100); /* JS calculado - PRIORIDADE */
+      height: 100dvh; /* Modern browsers */
+      height: -webkit-fill-available; /* Safari/iOS fallback */
       overflow: hidden;
-      position: fixed;
       width: 100%;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
     }
 
     header {
@@ -290,17 +292,6 @@
       }
     }
 
-    /* 🍎 FIX ESPECÍFICO PARA iOS/Safari */
-    @supports (-webkit-touch-callout: none) {
-      body {
-        height: -webkit-fill-available;
-      }
-
-      footer {
-        position: sticky;
-        bottom: 0;
-      }
-    }
   </style>
 </head>
 <body>
@@ -323,6 +314,17 @@
 </footer>
 
 <script>
+  // 🔧 FIX UNIVERSAL: Calcular altura real do viewport para mobile
+  function setRealViewportHeight() {
+    const vh = window.innerHeight * 0.01;
+    document.documentElement.style.setProperty('--vh', `${vh}px`);
+  }
+
+  // Executar ao carregar e ao redimensionar
+  setRealViewportHeight();
+  window.addEventListener('resize', setRealViewportHeight);
+  window.addEventListener('orientationchange', setRealViewportHeight);
+
   const chat = document.getElementById("chat");
   const input = document.getElementById("input");
   const sendBtn = document.getElementById("send");
