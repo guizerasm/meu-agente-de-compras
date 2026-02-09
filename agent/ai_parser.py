@@ -241,9 +241,17 @@ def consolidar_substituicoes(dieta: dict) -> dict:
     """
     # Palavras que indicam que a refeição é uma SUBSTITUIÇÃO (ignorar)
     PALAVRAS_SUBSTITUICAO = [
-        "substituição", "substituicao", "substitui", "alternativa",
-        "opção", "opcao", "opcional", "troca", "trocar",
-        "substituir", "ou ", "replace", "alternative"
+        # Português
+        "substituição", "substituicao", "substitui", "substituir",
+        "alternativa", "alternativo",
+        "opção", "opcao", "opcional",
+        "troca", "trocar",
+        "variação", "variacao",
+        "sugestão", "sugestao",
+        # Padrões comuns
+        "ou_", "_ou_", "opcao_", "alt_",
+        # Inglês
+        "replace", "alternative", "option", "swap"
     ]
 
     # Categorias de substituição de alimentos

@@ -1017,7 +1017,14 @@
 
       if (data.erro) throw new Error(data.erro);
 
-      listaFinal = data.lista_compras;
+      listaFinal = data.lista_compras || [];
+
+      // Verificar se lista esta vazia
+      if (!listaFinal || listaFinal.length === 0) {
+        addMessage("Nao foi possivel gerar a lista. Tente enviar sua dieta novamente.");
+        setStatus("Erro", "");
+        return;
+      }
 
       if (data.avisos && data.avisos.length > 0) {
         addMessage("Avisos: " + data.avisos.join("\n"));

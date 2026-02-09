@@ -113,6 +113,49 @@ def chat_humano(dieta, historico, mensagem_usuario):
     if "orgânico" in msg_lower or "organico" in msg_lower:
         dieta["preferencias"] = dieta.get("preferencias", "") + " orgânicos"
 
+    # ✅ DETECTAR TROCAS DE ALIMENTOS (ex: "trocar pão francês por pão de forma")
+    trocas_detectadas = []
+
+    # Mapeamento de trocas comuns
+    TROCAS_POSSIVEIS = {
+        "pão de forma": ["pao frances", "pão francês", "pao francês", "pão frances"],
+        "pao de forma": ["pao frances", "pão francês", "pao francês", "pão frances"],
+        "pão francês": ["pao de forma", "pão de forma"],
+        "carne": ["frango", "peixe", "tilapia"],
+        "frango": ["carne", "peixe", "tilapia"],
+        "peixe": ["frango", "carne"],
+        "batata": ["arroz", "macarrão", "macarrao"],
+        "arroz": ["batata", "macarrão", "macarrao"],
+        "macarrão": ["arroz", "batata"],
+    }
+
+    # Detectar pedidos de troca
+    palavras_troca = ["trocar", "troca", "mudar", "muda", "prefiro", "quero", "substituir", "substitui"]
+    if any(palavra in msg_lower for palavra in palavras_troca):
+        # Procurar qual alimento o usuário quer
+        for alimento_novo, alimentos_antigos in TROCAS_POSSIVEIS.items():
+            if alimento_novo in msg_lower:
+                # Verificar se menciona algum alimento antigo ou se é genérico
+                for alimento_antigo in alimentos_antigos:
+                    # Atualizar nas refeições
+                    if "refeicoes" in dieta:
+                        for nome_refeicao, itens in dieta["refeicoes"].items():
+                            for i, item in enumerate(itens):
+                                item_nome = item.get("item", "").lower()
+                                if alimento_antigo in item_nome:
+                                    # Manter quantidade, trocar nome
+                                    qtd = item.get("quantidade", "1 unidade")
+                                    dieta["refeicoes"][nome_refeicao][i] = {
+                                        "item": alimento_novo.title(),
+                                        "quantidade": qtd,
+                                        "vezes": 1
+                                    }
+                                    trocas_detectadas.append(f"{alimento_antigo} → {alimento_novo}")
+                                    print(f"[DEBUG] Troca detectada: {alimento_antigo} → {alimento_novo} em {nome_refeicao}")
+
+    if trocas_detectadas:
+        print(f"[DEBUG] Total de trocas: {len(trocas_detectadas)}")
+
     return resposta, historico
 
 
