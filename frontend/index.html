@@ -1074,7 +1074,7 @@
     const opcao = document.getElementById("ajuste-opcao");
     if (opcao) opcao.remove();
 
-    fase = "conversando";
+    fase = "ajustar";  // CORRIGIDO: manter como "ajustar" para regenerar lista
     addMessage("Claro! Me diz o que quer mudar na lista. Por exemplo:\n- \"Adiciona mais frutas\"\n- \"Remove o peixe\"\n- \"Troca frango por carne\"\n- \"Aumenta a quantidade de arroz\"");
     input.focus();
   }

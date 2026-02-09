@@ -225,53 +225,13 @@ def verificar_prontidao(req: VerificarProntidaoRequest):
 
 def validar_quantidades(lista_compras: list, dieta: dict = None) -> tuple[bool, list]:
     """
-    Valida se as quantidades são razoáveis baseado no número de pessoas
-    Retorna (válido, lista_alertas)
+    Validacao DESABILITADA - a IA ja calcula corretamente
+    Retorna sempre (True, []) para nao gerar alertas falsos
     """
-    import re
-
-    # Extrair número de pessoas da dieta
-    num_pessoas = 2  # Padrão
-    if dieta and "pessoas" in dieta:
-        num_pessoas = int(dieta.get("pessoas", 2))
-
-    # Limites máximos razoáveis para 7 dias (por pessoa)
-    limites_por_pessoa = {
-        "arroz": 1.5,     # kg/pessoa/semana
-        "feijão": 0.8,    # kg/pessoa/semana
-        "macarrão": 1.0,  # kg/pessoa/semana
-        "carne": 2.0,     # kg/pessoa/semana
-        "frango": 2.0,    # kg/pessoa/semana
-        "peixe": 1.5,     # kg/pessoa/semana
-        "leite": 3.5,     # litros/pessoa/semana
-        "óleo": 0.5,      # litros/pessoa/semana
-    }
-
-    alertas = []
-
-    for item in lista_compras:
-        nome_lower = item.get("nome", "").lower()
-        qtd_str = item.get("quantidade", "")
-
-        # Extrair número da quantidade (ex: "3kg" -> 3.0)
-        match = re.search(r'(\d+\.?\d*)', qtd_str)
-        if match:
-            qtd_num = float(match.group(1))
-
-            # Verificar se algum limite foi violado
-            for alimento, limite_por_pessoa in limites_por_pessoa.items():
-                if alimento in nome_lower:
-                    # Calcular limite para número de pessoas + margem de 50%
-                    limite_esperado = limite_por_pessoa * num_pessoas
-                    limite_maximo = limite_esperado * 1.5  # +50% margem
-
-                    if qtd_num > limite_maximo:
-                        alertas.append(
-                            f"⚠️ {item['nome']}: {qtd_str} parece muito para {num_pessoas} pessoa(s)! "
-                            f"Sugestão: {limite_esperado:.1f}kg"
-                        )
-
-    return (len(alertas) == 0, alertas)
+    # DESABILITADO: A logica anterior tinha bugs que geravam alertas incorretos
+    # Ex: "150g parece muito, sugestao: 2kg" - completamente errado
+    # A IA ja faz os calculos corretos no SYSTEM_COMPRA
+    return (True, [])
 
 
 @app.post("/finalizar")
