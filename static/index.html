@@ -2,75 +2,58 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Agente de Compras</title>
   <style>
     * {
+      margin: 0;
+      padding: 0;
       box-sizing: border-box;
     }
 
-    :root {
-      --vh: 1vh;
-    }
-
-    html {
+    html, body {
+      width: 100%;
       height: 100%;
       overflow: hidden;
-    }
-
-    body {
-      margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
       background: #f2f2f2;
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-      /* Múltiplos fallbacks para compatibilidade total */
-      height: 100vh; /* Fallback padrão */
-      height: calc(var(--vh, 1vh) * 100); /* JS calculado - PRIORIDADE */
-      height: 100dvh; /* Modern browsers */
-      height: -webkit-fill-available; /* Safari/iOS fallback */
-      overflow: hidden;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
       width: 100%;
     }
 
     header {
       background: #0f766e;
       color: white;
-      padding: 16px;
+      padding: 14px;
       text-align: center;
       font-weight: bold;
-      font-size: 18px;
+      font-size: 17px;
+      flex-shrink: 0;
     }
 
-    .content-wrapper {
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      min-height: 0;
-    }
-
-    #chat {
+    main {
       flex: 1;
       overflow-y: auto;
       overflow-x: hidden;
-      padding: 16px;
-      padding-bottom: 8px;
+      -webkit-overflow-scrolling: touch;
+      padding: 12px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      min-height: 0;
+      gap: 10px;
     }
 
     .msg {
-      max-width: 70%;
-      padding: 12px 16px;
+      max-width: 85%;
+      padding: 10px 14px;
       border-radius: 12px;
-      line-height: 1.5;
-      white-space: pre-wrap;
+      line-height: 1.4;
       word-wrap: break-word;
-      font-size: 15px;
+      font-size: 14px;
     }
 
     .bot {
@@ -85,49 +68,78 @@
       align-self: flex-end;
     }
 
-    footer {
+    #lista {
+      display: none;
       padding: 12px;
-      padding-bottom: max(12px, env(safe-area-inset-bottom));
       background: white;
-      display: flex;
-      gap: 8px;
+      border-top: 2px solid #0f766e;
+      max-height: 40vh;
+      overflow-y: auto;
+    }
+
+    #lista h3 {
+      font-size: 16px;
+      margin-bottom: 10px;
+      color: #0f766e;
+    }
+
+    .item {
+      margin-bottom: 10px;
+      padding: 10px;
+      background: #f9fafb;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .item strong {
+      font-size: 14px;
+      color: #0f766e;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    footer {
+      padding: 10px;
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+      background: white;
       border-top: 1px solid #ddd;
-      flex-wrap: wrap;
       flex-shrink: 0;
-      position: relative;
-      z-index: 10;
-      -webkit-transform: translateZ(0);
-      transform: translateZ(0);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
     }
 
     textarea {
-      flex: 1;
-      min-width: 200px;
+      flex: 1 1 100%;
       resize: none;
-      padding: 12px;
+      padding: 10px;
       font-size: 16px;
       border: 1px solid #ddd;
       border-radius: 8px;
       font-family: inherit;
-      max-height: 100px;
+      min-height: 44px;
+      max-height: 80px;
     }
 
     button {
-      padding: 12px 16px;
+      padding: 10px 14px;
       background: #0f766e;
       color: white;
       border: none;
-      cursor: pointer;
       border-radius: 8px;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 500;
       min-height: 44px;
-      white-space: nowrap;
-      flex-shrink: 0;
+      flex: 1;
+      min-width: 80px;
+      cursor: pointer;
     }
 
     button.secondary {
       background: #374151;
+      flex: 0 0 auto;
+      min-width: 70px;
     }
 
     button:disabled {
@@ -136,195 +148,39 @@
     }
 
     button:active:not(:disabled) {
-      transform: scale(0.98);
+      opacity: 0.8;
     }
 
     #pdf {
       display: none;
     }
 
-    #lista {
-      padding: 16px;
-      background: white;
-      border-top: 2px solid #0f766e;
-      overflow-y: auto;
-      max-height: 250px;
-      flex-shrink: 1;
+    label {
+      flex: 0 0 auto;
     }
-
-    #lista h3 {
-      margin-top: 0;
-      font-size: 20px;
-    }
-
-    .item {
-      margin-bottom: 12px;
-      padding: 12px;
-      border-bottom: 1px solid #ddd;
-      background: #f9fafb;
-      border-radius: 6px;
-    }
-
-    .item strong {
-      font-size: 16px;
-      color: #0f766e;
-    }
-
-    /* 📱 MOBILE RESPONSIVE */
-    @media (max-width: 768px) {
-      body {
-        height: 100vh;
-        height: 100dvh;
-      }
-
-      header {
-        padding: 10px 12px;
-        font-size: 16px;
-      }
-
-      #chat {
-        padding: 10px 8px;
-        gap: 8px;
-      }
-
-      .msg {
-        max-width: 85%;
-        padding: 10px 12px;
-        font-size: 14px;
-      }
-
-      footer {
-        padding: 8px;
-        padding-bottom: max(8px, env(safe-area-inset-bottom));
-        gap: 6px;
-      }
-
-      textarea {
-        width: 100%;
-        flex: 1 1 100%;
-        min-width: unset;
-        font-size: 16px; /* Evita zoom no iOS */
-        padding: 10px;
-        min-height: 44px;
-        max-height: 80px;
-      }
-
-      button {
-        flex: 1;
-        min-width: calc(33.33% - 4px);
-        padding: 10px 8px;
-        font-size: 13px;
-        min-height: 44px;
-      }
-
-      button.secondary {
-        flex: 0 0 auto;
-        min-width: 60px;
-      }
-
-      #lista {
-        padding: 10px;
-        font-size: 14px;
-        max-height: 200px;
-      }
-
-      #lista h3 {
-        font-size: 16px;
-        margin-bottom: 8px;
-      }
-
-      .item {
-        padding: 8px;
-        font-size: 13px;
-        margin-bottom: 8px;
-      }
-
-      .item strong {
-        font-size: 14px;
-      }
-    }
-
-    /* 📱 MOBILE MUITO PEQUENO */
-    @media (max-width: 400px) {
-      header {
-        font-size: 14px;
-        padding: 8px 10px;
-      }
-
-      #chat {
-        padding: 8px 6px;
-      }
-
-      .msg {
-        max-width: 92%;
-        padding: 8px 10px;
-        font-size: 13px;
-      }
-
-      footer {
-        padding: 6px;
-        gap: 4px;
-      }
-
-      textarea {
-        padding: 8px;
-        font-size: 16px;
-      }
-
-      button {
-        font-size: 12px;
-        padding: 8px 6px;
-        min-height: 42px;
-      }
-
-      #lista {
-        padding: 8px;
-        max-height: 150px;
-      }
-
-      #lista h3 {
-        font-size: 15px;
-      }
-
-      .item {
-        padding: 6px;
-        font-size: 12px;
-      }
-    }
-
   </style>
 </head>
 <body>
 
-<header>🛒 Agente Inteligente de Compras</header>
+<div id="app">
+  <header>🛒 Agente de Compras</header>
 
-<div class="content-wrapper">
-  <div id="chat"></div>
-  <div id="lista" style="display:none;"></div>
+  <main id="chat"></main>
+
+  <div id="lista"></div>
+
+  <footer>
+    <label>
+      <button class="secondary">PDF</button>
+      <input type="file" id="pdf" accept="application/pdf" />
+    </label>
+    <textarea id="input" placeholder="Digite sua dieta ou responda..."></textarea>
+    <button id="send">Enviar</button>
+    <button id="finalizar" class="secondary" disabled>Finalizar</button>
+  </footer>
 </div>
 
-<footer>
-  <label>
-    <button class="secondary">PDF</button>
-    <input type="file" id="pdf" accept="application/pdf" />
-  </label>
-  <textarea id="input" rows="2" placeholder="Digite sua dieta ou responda o assistente..."></textarea>
-  <button id="send">Enviar</button>
-  <button id="finalizar" class="secondary" disabled>Finalizar</button>
-</footer>
-
 <script>
-  // 🔧 FIX UNIVERSAL: Calcular altura real do viewport para mobile
-  function setRealViewportHeight() {
-    const vh = window.innerHeight * 0.01;
-    document.documentElement.style.setProperty('--vh', `${vh}px`);
-  }
-
-  // Executar ao carregar e ao redimensionar
-  setRealViewportHeight();
-  window.addEventListener('resize', setRealViewportHeight);
-  window.addEventListener('orientationchange', setRealViewportHeight);
-
   const chat = document.getElementById("chat");
   const input = document.getElementById("input");
   const sendBtn = document.getElementById("send");
@@ -411,13 +267,13 @@
     lista.forEach(item => {
       const div = document.createElement("div");
       div.className = "item";
-      div.innerHTML = `<strong>${item.nome}</strong><br>
+      div.innerHTML = `<strong>${item.nome}</strong>
                        Quantidade: ${item.quantidade}<br>
                        <em>${item.motivo}</em>`;
       listaDiv.appendChild(div);
     });
 
-    addMessage("Lista de compras gerada abaixo 👇", "bot");
+    addMessage("Lista gerada abaixo 👇", "bot");
   }
 
   sendBtn.onclick = async () => {
