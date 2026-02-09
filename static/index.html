@@ -13,12 +13,11 @@
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
       background: #f2f2f2;
-      display: flex;
-      flex-direction: column;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
       height: 100vh;
       height: 100dvh; /* Dynamic viewport height para mobile */
       overflow: hidden;
-      position: relative;
     }
 
     header {
@@ -28,7 +27,13 @@
       text-align: center;
       font-weight: bold;
       font-size: 18px;
-      flex-shrink: 0;
+    }
+
+    .content-wrapper {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
     }
 
     #chat {
@@ -125,8 +130,8 @@
       background: white;
       border-top: 2px solid #0f766e;
       overflow-y: auto;
-      max-height: 40vh;
-      flex-shrink: 0;
+      max-height: 250px;
+      flex-shrink: 1;
     }
 
     #lista h3 {
@@ -201,7 +206,7 @@
       #lista {
         padding: 10px;
         font-size: 14px;
-        max-height: 35vh;
+        max-height: 200px;
       }
 
       #lista h3 {
@@ -255,7 +260,7 @@
 
       #lista {
         padding: 8px;
-        max-height: 30vh;
+        max-height: 150px;
       }
 
       #lista h3 {
@@ -273,9 +278,10 @@
 
 <header>🛒 Agente Inteligente de Compras</header>
 
-<div id="chat"></div>
-
-<div id="lista" style="display:none;"></div>
+<div class="content-wrapper">
+  <div id="chat"></div>
+  <div id="lista" style="display:none;"></div>
+</div>
 
 <footer>
   <label>
