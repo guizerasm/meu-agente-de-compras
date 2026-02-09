@@ -191,7 +191,24 @@ def interpretar_dieta(texto: str) -> dict:
         print(f"[AI_PARSER] JSON parseado com sucesso:")
         if "refeicoes" in resultado:
             total_itens = sum(len(itens) for itens in resultado.get("refeicoes", {}).values())
-            print(f"  - {total_itens} itens em {len(resultado.get('refeicoes', {}))} refeicoes")
+            print(f"  - {total_itens} itens em {len(resultado.get('refeicoes', {}))} refeicoes (antes consolidação)")
+
+            # ✅ CONSOLIDAR SUBSTITUIÇÕES (frango/carne/peixe → proteína variada)
+            resultado = consolidar_substituicoes(resultado)
+
+            # Recalcular fixos após consolidação
+            fixos = []
+            for refeicao, itens in resultado.get("refeicoes", {}).items():
+                for item in itens:
+                    nome = item.get("item", "")
+                    qtd = item.get("quantidade", "")
+                    descricao = f"{nome} ({qtd}) - {refeicao}"
+                    if descricao not in fixos:
+                        fixos.append(descricao)
+            resultado["fixos"] = fixos
+
+            total_itens_depois = sum(len(itens) for itens in resultado.get("refeicoes", {}).values())
+            print(f"  - {total_itens_depois} itens após consolidação")
         else:
             print(f"  - {len(resultado.get('fixos', []))} itens fixos")
         print(f"  - {len(resultado.get('escolhas', []))} escolhas")
@@ -201,6 +218,113 @@ def interpretar_dieta(texto: str) -> dict:
         print(f"[AI_PARSER ERRO] Falha ao parsear JSON: {e}")
         print(f"[AI_PARSER ERRO] Conteudo recebido: {resposta_ai[:500]}\n")
         return {"fixos": [], "escolhas": [], "dias": 1, "refeicoes": {}}
+
+
+def consolidar_substituicoes(dieta: dict) -> dict:
+    """
+    Pós-processamento: consolida itens que são substituições (frango/carne/peixe)
+    em uma única categoria para evitar duplicação
+    """
+    # Categorias de substituição comuns
+    PROTEINAS = ["frango", "carne", "peixe", "tilapia", "filé", "file", "bife",
+                 "alcatra", "patinho", "acém", "acem", "costela", "lombo",
+                 "peito de frango", "coxa", "sobrecoxa", "salmão", "salmon", "atum"]
+    CARBOIDRATOS = ["arroz", "batata", "macarrão", "macarrao", "massa", "nhoque",
+                    "batata doce", "mandioca", "inhame", "cará", "cara"]
+    FRUTAS = ["banana", "maçã", "maca", "laranja", "mamão", "mamao", "melão",
+              "melao", "melancia", "abacaxi", "manga", "uva", "morango", "kiwi",
+              "pera", "pêra", "goiaba", "ameixa"]
+
+    refeicoes = dieta.get("refeicoes", {})
+    if not refeicoes:
+        return dieta
+
+    print(f"\n[CONSOLIDAR] Verificando substituições...")
+
+    novas_refeicoes = {}
+
+    for nome_refeicao, itens in refeicoes.items():
+        # Detectar proteínas, carboidratos e frutas nesta refeição
+        proteinas_encontradas = []
+        carboidratos_encontrados = []
+        frutas_encontradas = []
+        outros_itens = []
+
+        for item in itens:
+            nome_lower = item.get("item", "").lower()
+            encontrou = False
+
+            # Verificar se é proteína
+            for p in PROTEINAS:
+                if p in nome_lower:
+                    proteinas_encontradas.append(item)
+                    encontrou = True
+                    break
+
+            if not encontrou:
+                # Verificar se é carboidrato
+                for c in CARBOIDRATOS:
+                    if c in nome_lower:
+                        carboidratos_encontrados.append(item)
+                        encontrou = True
+                        break
+
+            if not encontrou:
+                # Verificar se é fruta
+                for f in FRUTAS:
+                    if f in nome_lower:
+                        frutas_encontradas.append(item)
+                        encontrou = True
+                        break
+
+            if not encontrou:
+                outros_itens.append(item)
+
+        # Consolidar se tiver mais de 1 do mesmo tipo
+        novos_itens = outros_itens.copy()
+
+        if len(proteinas_encontradas) > 1:
+            # Pegar a maior quantidade como referência
+            qtd_max = proteinas_encontradas[0].get("quantidade", "150g")
+            nomes = [p.get("item", "") for p in proteinas_encontradas]
+            print(f"  - Consolidando {len(proteinas_encontradas)} proteínas em '{nome_refeicao}': {nomes}")
+            novos_itens.append({
+                "item": "Proteína variada",
+                "quantidade": qtd_max,
+                "vezes": 1
+            })
+        elif len(proteinas_encontradas) == 1:
+            novos_itens.append(proteinas_encontradas[0])
+
+        if len(carboidratos_encontrados) > 1:
+            qtd_max = carboidratos_encontrados[0].get("quantidade", "200g")
+            nomes = [c.get("item", "") for c in carboidratos_encontrados]
+            print(f"  - Consolidando {len(carboidratos_encontrados)} carboidratos em '{nome_refeicao}': {nomes}")
+            novos_itens.append({
+                "item": "Carboidrato variado",
+                "quantidade": qtd_max,
+                "vezes": 1
+            })
+        elif len(carboidratos_encontrados) == 1:
+            novos_itens.append(carboidratos_encontrados[0])
+
+        if len(frutas_encontradas) > 1:
+            qtd_max = frutas_encontradas[0].get("quantidade", "1 unidade")
+            nomes = [f.get("item", "") for f in frutas_encontradas]
+            print(f"  - Consolidando {len(frutas_encontradas)} frutas em '{nome_refeicao}': {nomes}")
+            novos_itens.append({
+                "item": "Fruta variada",
+                "quantidade": qtd_max,
+                "vezes": 1
+            })
+        elif len(frutas_encontradas) == 1:
+            novos_itens.append(frutas_encontradas[0])
+
+        novas_refeicoes[nome_refeicao] = novos_itens
+
+    dieta["refeicoes"] = novas_refeicoes
+    print(f"[CONSOLIDAR] Concluído\n")
+    return dieta
 
 
 def conversar_com_usuario(dieta: dict, historico: list) -> str:
