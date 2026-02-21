@@ -545,13 +545,41 @@ def gerar_lista_compras(dieta: dict) -> list:
             vezes = item.get("vezes", 1)
 
             # Agregar (normalizar nome para agrupar variações)
-            chave = _normalizar_nome_item(nome_item)
+            # Incluir unidade na chave para NÃO misturar g com unidade
+            # (ex: "banana|g" separado de "banana|unidade")
+            nome_norm = _normalizar_nome_item(nome_item)
+            chave = f"{nome_norm}|{unidade}"
             # Manter o nome mais curto como display name
             if "nome" not in agregado[chave] or len(nome_item) < len(agregado[chave]["nome"]):
                 agregado[chave]["nome"] = nome_item
             agregado[chave]["qtd"] += qtd_num * vezes
             agregado[chave]["unidade"] = unidade
             agregado[chave]["refeicoes"].add(nome_refeicao)
+
+    # Mesclar entradas do mesmo item com unidades diferentes (g → unidade)
+    # Ex: "banana|g" (80g) + "banana|unidade" (2 un) → "banana|unidade" (3 un)
+    PESO_MEDIO_FRUTA = {
+        "banana": 80, "maçã": 150, "laranja": 180, "mexerica": 120,
+        "manga": 300, "goiaba": 150, "pêra": 170, "pêssego": 130,
+        "kiwi": 80, "caqui": 170, "ameixa": 50, "maracujá": 120,
+    }
+    nomes_no_agregado = set(k.split("|")[0] for k in agregado)
+    for nome_norm in nomes_no_agregado:
+        chave_g = f"{nome_norm}|g"
+        chave_un = f"{nome_norm}|unidade"
+        if chave_g in agregado and chave_un in agregado:
+            peso = PESO_MEDIO_FRUTA.get(nome_norm)
+            if peso:
+                # Converter gramas para unidades e somar
+                qtd_g = agregado[chave_g]["qtd"]
+                qtd_em_un = qtd_g / peso
+                agregado[chave_un]["qtd"] += qtd_em_un
+                agregado[chave_un]["refeicoes"].update(agregado[chave_g]["refeicoes"])
+                # Manter o nome mais curto
+                if len(agregado[chave_g].get("nome", "")) < len(agregado[chave_un].get("nome", "")):
+                    agregado[chave_un]["nome"] = agregado[chave_g]["nome"]
+                print(f"  [MERGE] {nome_norm}: {qtd_g}g → {qtd_em_un:.1f} un (peso médio {peso}g)")
+                del agregado[chave_g]
 
     # Calcular quantidade final
     lista = []
@@ -563,7 +591,9 @@ def gerar_lista_compras(dieta: dict) -> list:
         qtd_semanal = qtd_diaria * multiplicador_dias * pessoas
         unidade = dados["unidade"]
 
-        qtd_formatada = _formatar_quantidade(chave, qtd_semanal, unidade)
+        # Chave é "nome|unidade", extrair só o nome para formatação
+        nome_norm = chave.split("|")[0]
+        qtd_formatada = _formatar_quantidade(nome_norm, qtd_semanal, unidade)
         refeicoes_list = list(dados["refeicoes"])
 
         motivo = f"{'+'.join(refeicoes_list)} ({qtd_diaria:.0f}/dia × {multiplicador_dias} dias × {pessoas} pessoa(s))"
@@ -681,6 +711,12 @@ NORMALIZACAO_NOMES = [
     ("whey protein", "whey protein"),
     ("manteiga de amendoim", "pasta de amendoim"),
     ("pasta de amendoim", "pasta de amendoim"),
+    # Frutas (variações com tipo específico)
+    ("banana prata", "banana"),
+    ("banana nanica", "banana"),
+    ("banana da terra", "banana da terra"),
+    ("maçã verde", "maçã"),
+    ("maçã fuji", "maçã"),
 ]
 
 
