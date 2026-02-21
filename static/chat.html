@@ -674,7 +674,15 @@
 
       listaDiv.classList.add("visible");
 
-      addMessage("🎉 Lista pronta! Você pode visualizar no painel lateral à direita.");
+      // Botão de baixar PDF
+      const pdfDownloadBtn = document.createElement("button");
+      pdfDownloadBtn.textContent = "📥 Baixar PDF";
+      pdfDownloadBtn.className = "success";
+      pdfDownloadBtn.style.cssText = "margin: 12px auto; display: block; width: 90%; padding: 12px;";
+      pdfDownloadBtn.onclick = baixarPDF;
+      listaDiv.appendChild(pdfDownloadBtn);
+
+      addMessage("🎉 Lista pronta! Você pode visualizar no painel lateral e baixar o PDF.");
       setStatus("Concluído", "ready");
       finalizarBtn.disabled = true;
 
@@ -683,6 +691,29 @@
       addMessage(`❌ Erro ao gerar lista: ${erro.message}`);
       console.error(erro);
       setStatus("Erro", "default");
+    }
+  }
+
+  async function baixarPDF() {
+    if (!listaFinal || listaFinal.length === 0) return;
+    try {
+      const res = await fetch(`${API_URL}/gerar-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lista_compras: listaFinal })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "lista_compras.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      addMessage(`❌ Erro ao baixar PDF: ${e.message}`);
     }
   }
 
