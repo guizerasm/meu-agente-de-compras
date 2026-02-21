@@ -251,7 +251,7 @@ def interpretar_dieta(texto: str) -> dict:
     print(f"\n[INTERPRETAR] Processando {len(texto)} caracteres...")
 
     r = client.chat.completions.create(
-        model="gpt-5-mini",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": SYSTEM_INTERPRETACAO},
             {"role": "user", "content": texto}
@@ -483,7 +483,7 @@ def conversar_com_usuario(dieta: dict, historico: list) -> str:
     messages.extend(historico)
 
     r = client.chat.completions.create(
-        model="gpt-5-mini",
+        model="gpt-4o-mini",
         messages=messages
     )
 
