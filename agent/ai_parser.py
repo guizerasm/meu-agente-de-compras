@@ -38,10 +38,15 @@ FRUTAS = [
 
 # Palavras que indicam SUBSTITUIÇÃO (ignorar completamente)
 PALAVRAS_SUBSTITUICAO = [
-    "substituição", "substituicao", "substitui",
+    "substituição", "substituicao", "substitui", "substituir",
     "alternativa", "alternativo",
-    "opção", "opcao",
-    "variação", "variacao"
+    "opção", "opcao", "opcion",
+    "variação", "variacao",
+    "troca", "trocar",
+    "ou_então", "ou_entao",
+    "_sub", "_alt", "_var", "_opt",
+    "opcao_", "opção_",
+    "substituicao_", "substituição_",
 ]
 
 
@@ -50,12 +55,13 @@ PALAVRAS_SUBSTITUICAO = [
 # =============================================================================
 
 SYSTEM_INTERPRETACAO = """
-Você é um extrator de dados de dietas nutricionais.
+Você é um extrator especializado de dietas nutricionais brasileiras. Sua tarefa é ler a dieta e retornar um JSON estruturado com as refeições e quantidades.
 
-FORMATO DE SAÍDA (JSON):
+## FORMATO DE SAÍDA (JSON obrigatório):
 {
   "refeicoes": {
-    "cafe_manha": [{"item": "Pão francês", "quantidade": "1 unidade"}, ...],
+    "cafe_manha": [{"item": "Nome do alimento", "quantidade": "valor normalizado"}, ...],
+    "lanche_manha": [...],
     "almoco": [...],
     "lanche_tarde": [...],
     "jantar": [...],
@@ -64,18 +70,157 @@ FORMATO DE SAÍDA (JSON):
   "dias": 1
 }
 
-REGRAS IMPORTANTES:
-1. Extraia apenas as REFEIÇÕES PRINCIPAIS (café, almoço, lanche, jantar, ceia)
-2. IGNORE completamente seções chamadas "Substituição 1", "Substituição 2", etc.
-3. Quando houver "X ou Y ou Z", pegue apenas o PRIMEIRO item (X)
-4. Mantenha quantidades exatas: "150g", "2 unidades", "1 pote"
-5. dias = 1 para dieta diária
+## MAPEAMENTO DE REFEIÇÕES
+Mapeie qualquer variação para as chaves corretas:
+- "Café da manhã", "Desjejum", "Pequeno-almoço" → cafe_manha
+- "Lanche da manhã", "Colação", "Lanche matinal" → lanche_manha
+- "Almoço", "Refeição 1", "Refeição principal" → almoco
+- "Lanche da tarde", "Lanche", "Lanche vespertino", "Colação da tarde", "Pré-treino", "Pós-treino" → lanche_tarde
+- "Jantar", "Refeição noturna", "Refeição 2" → jantar
+- "Ceia", "Lanche noturno", "Antes de dormir" → ceia
 
-EXEMPLO:
-"pão francês (1 unidade) ou pão integral (2 fatias)" → {"item": "Pão francês", "quantidade": "1 unidade"}
-"Frango (150g) ou Carne (140g)" → {"item": "Frango", "quantidade": "150g"}
+## NORMALIZAÇÃO DE QUANTIDADES (CRÍTICO)
+Converta SEMPRE para estes formatos antes de retornar:
 
-⚠️ NUNCA inclua itens de seções "Substituição"!
+| Entrada | Retornar |
+|---|---|
+| 150g, 150 gramas, cento e cinquenta gramas | "150g" |
+| 1kg, 1 quilo | "1000g" |
+| 200ml, 200 mililitros | "200ml" |
+| 1 copo (200ml), 1 copo de água | "200ml" |
+| 1 xícara, 1 xic. | "1 xicara" |
+| 1/2 xícara, meia xícara | "0.5 xicara" |
+| 1 colher de sopa, 1 cs, 1 C.S. | "1 colher_sopa" |
+| 1 colher de chá, 1 cc, 1 C.C. | "1 colher_cha" |
+| 1 unidade, 1 un, 1 und, 1 uni | "1 unidade" |
+| 2 fatias, 2 fts | "2 fatias" |
+| 1 pote, 1 pote pequeno | "1 pote" |
+| 1 lata | "1 lata" |
+| 1 sachê, 1 sache, 1 envelope | "1 sache" |
+| 1 caixa | "1 caixa" |
+| 1 pacote | "1 pacote" |
+| 1 concha, 2 conchas | "100g" por concha (1 concha = 100g) |
+| 150-200g (range) | "200g" (pegar o MAIOR valor) |
+| "meia" + unidade | "0.5 " + unidade |
+| "um quarto de" | "0.25 " + unidade |
+
+## REGRAS DE EXTRAÇÃO
+
+1. **IGNORE completamente** qualquer seção ou bloco que contenha estas palavras no título: "Substituição", "Substituto", "Alternativa", "Opção", "Variação", "OU ENTÃO", "Troca", "Pode trocar por". Isso inclui:
+   - Seções separadas: "Substituição 1:", "Substituição do almoço:", "Alternativas:"
+   - Sub-blocos dentro de uma refeição
+   - Tabelas com "Opção 1 / Opção 2" → use APENAS a Opção 1
+   - Qualquer texto após "Pode substituir por", "Ou trocar por", "Alternativa:"
+   Se ficar em dúvida, NÃO inclua o item.
+
+2. **Quando houver "X ou Y" / "X / Y"**: pegue APENAS o PRIMEIRO item (X), NUNCA inclua os demais. Exemplos:
+   - "Frango (150g) ou Carne (140g) ou Peixe (120g)" → APENAS Frango, 150g
+   - "Pão francês / Tapioca / Cuscuz" → APENAS Pão francês
+   - "1 fruta (banana, maçã ou pera)" → APENAS Banana, 1 unidade
+
+3. **Alimentos "à vontade" / "livre" / "sem restrição"**: inclua com quantidade "a vontade" (o sistema vai ignorar automaticamente).
+
+4. **Suplementos e temperos**: inclua normalmente (whey, creatina, azeite, sal, etc.) com suas quantidades.
+
+5. **dias**:
+   - Dieta DIÁRIA (mesmo cardápio todo dia): use dias=1. NÃO inclua campo "vezes".
+   - Dieta SEMANAL (dias diferentes): use dias=7. Inclua TODOS os itens únicos de TODOS os dias, com campo `"vezes": X` indicando em quantos dias da semana aquele item aparece naquela refeição.
+   Exemplo de dieta semanal: "Seg: arroz+frango. Ter: macarrão+carne. Qua: arroz+peixe. Qui-Dom: repetir Seg"
+   → almoco: [
+       {"item": "Arroz", "quantidade": "4 colher_sopa", "estimado": true, "vezes": 6},
+       {"item": "Frango", "quantidade": "150g", "estimado": true, "vezes": 5},
+       {"item": "Macarrão", "quantidade": "100g", "estimado": true, "vezes": 1},
+       {"item": "Carne", "quantidade": "150g", "estimado": true, "vezes": 1},
+       {"item": "Peixe", "quantidade": "150g", "estimado": true, "vezes": 1}
+   ]
+   Contagem: Seg=1, Ter=1, Qua=1, Qui=rep Seg, Sex=rep Seg, Sab=rep Seg, Dom=rep Seg → arroz: Seg+Qua+Qui+Sex+Sab+Dom=6, frango: Seg+Qui+Sex+Sab+Dom=5
+
+6. **Não invente itens**: extraia apenas o que está escrito. **SEMPRE retorne os nomes dos alimentos em PORTUGUÊS**, mesmo que o input esteja em inglês (eggs → Ovo, chicken breast → Peito de frango, sweet potato → Batata doce, milk → Leite, peanut butter → Pasta de amendoim, casein → Caseína).
+
+8. **NUNCA crie refeições duplicadas ou numeradas**. Use APENAS estas chaves: cafe_manha, lanche_manha, almoco, lanche_tarde, jantar, ceia. Se houver "Substituição do Almoço" ou "Almoço 2" ou "Opção 2 do Almoço", IGNORE completamente — não crie chaves como "almoco_2", "almoco_sub", "jantar_alternativo", etc.
+
+7. **Quando a quantidade NÃO está especificada**: use porções padrão brasileiras e marque com `"estimado": true`:
+   - Proteínas (frango, carne, peixe, bife): "150g"
+   - Arroz: "4 colher_sopa"
+   - Feijão: "100g"
+   - Pão: "1 unidade"
+   - Fruta (banana, maçã, etc.): "1 unidade"
+   - Ovo: "1 unidade"
+   - Leite: "200ml"
+   - Iogurte: "1 pote"
+   - Azeite: "1 colher_sopa"
+   - Manteiga/margarina/requeijão: "10g"
+   - Salada/alface/folhas/legumes: "100g"
+   - Sopa (qualquer): "400ml"
+   - Whey/suplemento: "30g"
+   - Aveia: "2 colher_sopa"
+   - Queijo: "30g"
+   - Castanhas/nozes/amendoim: "30g"
+   - Outros: "1 unidade"
+   Exemplo: {"item": "Frango", "quantidade": "150g", "estimado": true}
+
+## EXEMPLOS REAIS
+
+Entrada:
+"Café da manhã: Pão francês (1 unidade) + Ovo mexido (2 ovos) + Café com leite (200ml)"
+
+Saída:
+{"cafe_manha": [
+  {"item": "Pão francês", "quantidade": "1 unidade"},
+  {"item": "Ovo", "quantidade": "2 unidades"},
+  {"item": "Leite", "quantidade": "200ml"}
+]}
+
+---
+
+Entrada:
+"ALMOÇO: Arroz (4 colheres de sopa) / Feijão (2 conchas) / Frango grelhado (150g a 180g) / Salada à vontade"
+
+Saída:
+{"almoco": [
+  {"item": "Arroz", "quantidade": "4 colher_sopa"},
+  {"item": "Feijão", "quantidade": "200g"},
+  {"item": "Frango grelhado", "quantidade": "180g"},
+  {"item": "Salada", "quantidade": "a vontade"}
+]}
+
+---
+
+Entrada:
+"Lanche: 1 fruta média (banana, maçã ou pera) + Whey protein (1 scoop/30g)"
+
+Saída:
+{"lanche_tarde": [
+  {"item": "Banana", "quantidade": "1 unidade"},
+  {"item": "Whey protein", "quantidade": "30g"}
+]}
+
+---
+
+Entrada (dieta complexa com substituições - IGNORAR substitutos):
+"Almoço:
+Arroz (4 colheres de sopa)
+Feijão (1 concha)
+Frango grelhado (150g) ou Carne moída (140g) ou Peixe (120g)
+Salada verde à vontade
+Azeite (1 colher de sopa)
+
+Substituição do Almoço:
+Macarrão integral (100g)
+Atum (1 lata)
+Legumes refogados (150g)"
+
+Saída CORRETA:
+{"almoco": [
+  {"item": "Arroz", "quantidade": "4 colher_sopa"},
+  {"item": "Feijão", "quantidade": "100g"},
+  {"item": "Frango grelhado", "quantidade": "150g"},
+  {"item": "Salada verde", "quantidade": "a vontade"},
+  {"item": "Azeite", "quantidade": "1 colher_sopa"}
+]}
+(Carne moída, Peixe e toda a "Substituição do Almoço" foram IGNORADOS)
+
+⚠️ Retorne APENAS o JSON, sem explicações, sem markdown.
 """
 
 
@@ -106,12 +251,11 @@ def interpretar_dieta(texto: str) -> dict:
     print(f"\n[INTERPRETAR] Processando {len(texto)} caracteres...")
 
     r = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
         messages=[
             {"role": "system", "content": SYSTEM_INTERPRETACAO},
             {"role": "user", "content": texto}
-        ],
-        temperature=0
+        ]
     )
 
     resposta = r.choices[0].message.content
@@ -121,8 +265,29 @@ def interpretar_dieta(texto: str) -> dict:
         print("[ERRO] Falha ao parsear JSON da IA")
         return {"fixos": [], "escolhas": [], "dias": 1, "refeicoes": {}}
 
-    # Filtrar refeições de substituição
+    # Filtrar refeições com nomes fora da lista permitida
+    resultado = _filtrar_refeicoes_invalidas(resultado)
+
+    # Filtrar refeições de substituição (por nome da refeição)
     resultado = _filtrar_substituicoes(resultado)
+
+    # Filtrar duplicatas de proteína/carboidrato por refeição (última linha de defesa)
+    # NÃO filtrar em dietas semanais — múltiplas proteínas/carbs representam dias diferentes
+    if resultado.get("dias", 1) == 1:
+        resultado = _filtrar_duplicatas_por_categoria(resultado)
+
+    # Detectar itens com quantidades estimadas
+    itens_estimados = []
+    for refeicao, itens in resultado.get("refeicoes", {}).items():
+        for item in itens:
+            if item.get("estimado"):
+                itens_estimados.append(item.get("item", ""))
+                del item["estimado"]  # limpar flag, não precisa ir pro frontend
+
+    if itens_estimados:
+        resultado["tem_estimativas"] = True
+        resultado["itens_estimados"] = itens_estimados
+        print(f"[INTERPRETAR] {len(itens_estimados)} itens com quantidade estimada: {itens_estimados}")
 
     # Gerar fixos para compatibilidade
     resultado["fixos"] = _gerar_fixos(resultado)
@@ -133,6 +298,89 @@ def interpretar_dieta(texto: str) -> dict:
     print(f"[INTERPRETAR] {total} itens em {len(resultado.get('refeicoes', {}))} refeições")
 
     return resultado
+
+
+REFEICOES_PERMITIDAS = {
+    "cafe_manha", "lanche_manha", "almoco",
+    "lanche_tarde", "jantar", "ceia",
+}
+
+# Mapeamento de refeições extras para a refeição permitida mais próxima
+MAPEAMENTO_REFEICOES = {
+    # Pré/pós treino
+    "pre_treino": "lanche_tarde",
+    "pos_treino": "lanche_tarde",
+    "pre treino": "lanche_tarde",
+    "pos treino": "lanche_tarde",
+    "treino": "lanche_tarde",
+    # Variações de lanche
+    "lanche_noturno": "ceia",
+    "lanche_noite": "ceia",
+    "lanche_1": "lanche_manha",
+    "lanche_2": "lanche_tarde",
+    "lanche": "lanche_tarde",
+    # Variações de refeições
+    "desjejum": "cafe_manha",
+    "colacao": "lanche_manha",
+    "refeicao_1": "almoco",
+    "refeicao_2": "jantar",
+    "refeicao_3": "ceia",
+    "antes_de_dormir": "ceia",
+    "refeicao_noturna": "ceia",
+}
+
+
+def _filtrar_refeicoes_invalidas(dieta: dict) -> dict:
+    """Normaliza refeições fora da lista permitida: mapeia para a mais próxima
+    ou remove se for substituição/duplicata."""
+    refeicoes = dieta.get("refeicoes", {})
+    filtradas = {}
+
+    for nome, itens in refeicoes.items():
+        if nome in REFEICOES_PERMITIDAS:
+            filtradas.setdefault(nome, []).extend(itens)
+        elif nome in MAPEAMENTO_REFEICOES:
+            destino = MAPEAMENTO_REFEICOES[nome]
+            print(f"  [MAPEAMENTO] '{nome}' → '{destino}'")
+            filtradas.setdefault(destino, []).extend(itens)
+        elif _tentar_mapear_por_similaridade(nome):
+            destino = _tentar_mapear_por_similaridade(nome)
+            print(f"  [MAPEAMENTO] '{nome}' → '{destino}' (por similaridade)")
+            filtradas.setdefault(destino, []).extend(itens)
+        else:
+            print(f"  [FILTRO] Removendo refeição '{nome}' (não reconhecida)")
+
+    dieta["refeicoes"] = filtradas
+    return dieta
+
+
+def _tentar_mapear_por_similaridade(nome: str) -> str:
+    """Tenta mapear uma refeição desconhecida para a permitida mais próxima.
+    Retorna string vazia se for provável substituição (numerada)."""
+    nome_lower = nome.lower()
+
+    # Refeições numeradas são substituições — NÃO mapear
+    if re.search(r'_\d+$|\d+$', nome_lower):
+        return ""
+
+    # Detecção por palavras-chave
+    mapa_palavras = {
+        "cafe": "cafe_manha",
+        "manha": "lanche_manha",
+        "almoco": "almoco",
+        "tarde": "lanche_tarde",
+        "treino": "lanche_tarde",
+        "jantar": "jantar",
+        "noite": "ceia",
+        "ceia": "ceia",
+        "dormir": "ceia",
+    }
+
+    for palavra, destino in mapa_palavras.items():
+        if palavra in nome_lower:
+            return destino
+
+    return ""
 
 
 def _filtrar_substituicoes(dieta: dict) -> dict:
@@ -150,6 +398,42 @@ def _filtrar_substituicoes(dieta: dict) -> dict:
             refeicoes_filtradas[nome] = itens
 
     dieta["refeicoes"] = refeicoes_filtradas
+    return dieta
+
+
+def _filtrar_duplicatas_por_categoria(dieta: dict) -> dict:
+    """Remove duplicatas de proteína/carboidrato na mesma refeição.
+    Se a IA incluiu 'Frango' E 'Carne' E 'Peixe' no almoço,
+    mantém apenas o primeiro de cada categoria."""
+    refeicoes = dieta.get("refeicoes", {})
+
+    for nome_refeicao, itens in refeicoes.items():
+        proteina_encontrada = False
+        carboidrato_encontrado = False
+        itens_filtrados = []
+
+        for item in itens:
+            nome_item = item.get("item", "").lower()
+
+            eh_proteina = any(p in nome_item for p in PROTEINAS)
+            eh_carboidrato = any(c in nome_item for c in CARBOIDRATOS)
+
+            if eh_proteina:
+                if proteina_encontrada:
+                    print(f"  [DUPLICATA] Removendo '{item.get('item')}' de {nome_refeicao} (proteína duplicada)")
+                    continue
+                proteina_encontrada = True
+
+            if eh_carboidrato:
+                if carboidrato_encontrado:
+                    print(f"  [DUPLICATA] Removendo '{item.get('item')}' de {nome_refeicao} (carboidrato duplicado)")
+                    continue
+                carboidrato_encontrado = True
+
+            itens_filtrados.append(item)
+
+        refeicoes[nome_refeicao] = itens_filtrados
+
     return dieta
 
 
@@ -199,9 +483,8 @@ def conversar_com_usuario(dieta: dict, historico: list) -> str:
     messages.extend(historico)
 
     r = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=messages,
-        temperature=0.3
+        model="gpt-5-mini",
+        messages=messages
     )
 
     return r.choices[0].message.content
@@ -225,8 +508,9 @@ def gerar_lista_compras(dieta: dict) -> list:
     pessoas = dieta.get("pessoas", 1)
     alimentos_em_casa = [a.lower() for a in dieta.get("alimentos_em_casa", [])]
 
-    # Se dias=1, é dieta DIÁRIA, multiplicar por 7 para semana
-    multiplicador_dias = 7 if dias == 1 else dias
+    # Se dias=1, é dieta DIÁRIA → multiplicar por 7 para completar a semana
+    # Se dias=7, é dieta SEMANAL → IA já somou todos os dias, não multiplicar
+    multiplicador_dias = 7 if dias == 1 else 1
 
     print(f"\n[CALC] Gerando lista de compras...")
     print(f"  - Dias informados: {dias} → multiplicador: {multiplicador_dias}")
@@ -257,10 +541,15 @@ def gerar_lista_compras(dieta: dict) -> list:
             # Extrair número e unidade
             qtd_num, unidade = _extrair_quantidade(qtd_str)
 
-            # Agregar
-            chave = nome_item.lower()
-            agregado[chave]["nome"] = nome_item
-            agregado[chave]["qtd"] += qtd_num
+            # Para dietas semanais, multiplicar pela frequência (vezes/semana)
+            vezes = item.get("vezes", 1)
+
+            # Agregar (normalizar nome para agrupar variações)
+            chave = _normalizar_nome_item(nome_item)
+            # Manter o nome mais curto como display name
+            if "nome" not in agregado[chave] or len(nome_item) < len(agregado[chave]["nome"]):
+                agregado[chave]["nome"] = nome_item
+            agregado[chave]["qtd"] += qtd_num * vezes
             agregado[chave]["unidade"] = unidade
             agregado[chave]["refeicoes"].add(nome_refeicao)
 
@@ -292,45 +581,142 @@ def gerar_lista_compras(dieta: dict) -> list:
 
 
 def _extrair_quantidade(qtd_str: str) -> tuple:
-    """Extrai número e unidade"""
+    """Extrai número e unidade. Suporta g, kg, ml, l, unidade, xícara,
+    colher_sopa, colher_cha, fatia, pote, lata, sachê, caixa, pacote, porção."""
     qtd_str = qtd_str.lower().strip()
 
-    # Padrões comuns
-    match = re.search(r'(\d+\.?\d*)\s*(g|kg|ml|l|unidade|unidades|pote|potes|colher|colheres|fatia|fatias|grama)?', qtd_str)
+    # Unidades compostas normalizadas pelo prompt da IA
+    UNIDADES_COMPOSTAS = {
+        "colher_sopa": ("colher_sopa", 1),
+        "colher_cha": ("colher_cha", 1),
+        "xicara": ("xicara", 1),
+    }
 
-    if not match:
-        # Tentar pegar só o número
-        match_num = re.search(r'(\d+)', qtd_str)
-        if match_num:
-            return float(match_num.group(1)), "unidade"
-        return 0, "unidade"
+    for alias, (unidade_final, fator) in UNIDADES_COMPOSTAS.items():
+        if alias in qtd_str:
+            match = re.search(r'(\d+\.?\d*)', qtd_str)
+            qtd = float(match.group(1)) if match else 1.0
+            return qtd * fator, unidade_final
 
-    qtd = float(match.group(1))
-    unidade = match.group(2) or "unidade"
+    # Unidades simples (ordem importa: mais específicas primeiro)
+    ALIAS_UNIDADES = [
+        (r'colher(?:es)?\s*de\s*sopa', "colher_sopa", 1),
+        (r'colher(?:es)?\s*de\s*ch[aá]', "colher_cha", 1),
+        (r'x[ií]car[as]?', "xicara", 1),
+        (r'kg', "g", 1000),
+        (r'gramas?', "g", 1),
+        (r'ml', "ml", 1),           # ml antes de l\b para não confundir
+        (r'litros?|(?<![a-z])l(?![a-z])', "ml", 1000),
+        (r'g\b', "g", 1),
+        (r'latas?', "lata", 1),
+        (r'sach[eê]s?|envelopes?', "sache", 1),
+        (r'caixas?', "caixa", 1),
+        (r'pacotes?', "pacote", 1),
+        (r'por[çc][oõ]es?|por[çc][aã]o', "porcao", 1),
+        (r'conchas?', "g", 100),           # 1 concha ≈ 100g
+        (r'potes?', "pote", 1),
+        (r'colheres?', "colher_sopa", 1),   # colher sem especificação → sopa
+        (r'fatias?', "fatia", 1),
+        (r'unidades?|un\.?|und\.?', "unidade", 1),
+    ]
 
-    # Normalizar
-    if unidade in ["unidades", "grama"]:
-        unidade = "unidade" if "unidades" in unidade else "g"
-    if unidade == "grama":
-        unidade = "g"
-    if unidade in ["potes"]:
-        unidade = "pote"
-    if unidade in ["colheres"]:
-        unidade = "colher"
-    if unidade in ["fatias"]:
-        unidade = "fatia"
-    if unidade == "l":
-        unidade = "ml"
-        qtd *= 1000
-    if unidade == "kg":
-        unidade = "g"
-        qtd *= 1000
+    for padrao, unidade_final, fator in ALIAS_UNIDADES:
+        match_u = re.search(padrao, qtd_str)
+        if match_u:
+            match_n = re.search(r'(\d+\.?\d*)', qtd_str)
+            qtd = float(match_n.group(1)) if match_n else 1.0
+            return qtd * fator, unidade_final
 
-    return qtd, unidade
+    # Fallback: só número
+    match_num = re.search(r'(\d+\.?\d*)', qtd_str)
+    if match_num:
+        return float(match_num.group(1)), "unidade"
+
+    return 0, "unidade"
+
+
+# =============================================================================
+# NORMALIZAÇÃO DE NOMES DE ITENS (para agregar variações)
+# =============================================================================
+
+# Mapeamento: se o nome contém a chave, normaliza para o valor
+# Ordem importa: mais específicos primeiro
+NORMALIZACAO_NOMES = [
+    # Proteínas
+    ("peito de frango", "frango"),
+    ("frango grelhado", "frango"),
+    ("frango desfiado", "frango"),
+    ("filé de frango", "frango"),
+    ("coxa de frango", "frango"),
+    ("sobrecoxa", "frango"),
+    ("carne moída", "carne"),
+    ("carne vermelha", "carne"),
+    ("filé mignon", "carne"),
+    ("bife", "carne"),
+    ("alcatra", "carne"),
+    ("patinho", "carne"),
+    ("filé de tilápia", "tilápia"),
+    ("tilapia", "tilápia"),
+    # Carboidratos
+    ("arroz integral", "arroz integral"),
+    ("arroz branco", "arroz"),
+    ("batata doce", "batata doce"),
+    ("batata inglesa", "batata"),
+    ("pão integral", "pão integral"),
+    ("pão francês", "pão"),
+    ("pao frances", "pão"),
+    ("pão de forma", "pão"),
+    ("macarrão integral", "macarrão integral"),
+    # Lácteos
+    ("leite desnatado", "leite"),
+    ("leite integral", "leite"),
+    ("iogurte natural", "iogurte"),
+    ("iogurte grego", "iogurte"),
+    # Vegetais
+    ("salada verde", "salada"),
+    ("salada mista", "salada"),
+    ("legumes refogados", "legumes"),
+    ("legumes cozidos", "legumes"),
+    # Suplementos
+    ("whey protein", "whey protein"),
+    ("manteiga de amendoim", "pasta de amendoim"),
+    ("pasta de amendoim", "pasta de amendoim"),
+]
+
+
+def _normalizar_nome_item(nome: str) -> str:
+    """Normaliza nome do item para agregar variações corretamente.
+    'Peito de frango' e 'Frango grelhado' viram 'Frango'."""
+    nome_lower = nome.lower()
+    for variacao, normalizado in NORMALIZACAO_NOMES:
+        if variacao in nome_lower:
+            return normalizado
+    return nome_lower
+
+
+# Peso médio de 1 colher de sopa por tipo de alimento (em gramas)
+PESO_COLHER_SOPA = {
+    "arroz": 25,       # 1 colher de sopa de arroz ≈ 25g
+    "feijão": 25,      # 1 colher de sopa de feijão ≈ 25g
+    "feijao": 25,
+    "aveia": 10,       # 1 colher de sopa de aveia ≈ 10g
+    "granola": 10,
+    "açúcar": 12,
+    "acucar": 12,
+    "farinha": 15,
+    "manteiga": 15,
+    "requeijão": 15,
+    "requeijao": 15,
+    "macarrão": 25,
+    "macarrao": 25,
+}
+
+# Alimentos que são líquidos (colher = ml)
+LIQUIDOS = ["azeite", "óleo", "oleo", "mel", "vinagre", "molho", "leite", "suco"]
 
 
 def _formatar_quantidade(nome: str, qtd: float, unidade: str) -> str:
-    """Formata quantidade para exibição"""
+    """Formata quantidade para exibição."""
     nome_lower = nome.lower()
 
     if unidade == "g":
@@ -338,6 +724,32 @@ def _formatar_quantidade(nome: str, qtd: float, unidade: str) -> str:
             kg = qtd / 1000
             return f"{kg:.1f}kg".replace(".0kg", "kg")
         return f"{int(qtd)}g"
+
+    if unidade == "ml":
+        if qtd >= 1000:
+            return f"{qtd/1000:.1f}L".replace(".0L", "L")
+        return f"{int(qtd)}ml"
+
+    if unidade in ("colher_sopa", "colher_cha"):
+        ml_por_colher = 15 if unidade == "colher_sopa" else 5
+        # Líquidos → converter para ml
+        if any(liq in nome_lower for liq in LIQUIDOS):
+            ml_total = qtd * ml_por_colher
+            if ml_total >= 1000:
+                return f"{ml_total/1000:.1f}L".replace(".0L", "L")
+            return f"{int(ml_total)}ml"
+        # Sólidos → converter para gramas
+        for alimento, peso in PESO_COLHER_SOPA.items():
+            if alimento in nome_lower:
+                gramas = qtd * peso
+                if gramas >= 1000:
+                    return f"{gramas/1000:.1f}kg".replace(".0kg", "kg")
+                return f"{int(gramas)}g"
+        # Fallback sólido: 1 colher sopa ≈ 20g
+        gramas = qtd * 20
+        if gramas >= 1000:
+            return f"{gramas/1000:.1f}kg".replace(".0kg", "kg")
+        return f"{int(gramas)}g"
 
     if unidade == "unidade":
         qtd_int = int(round(qtd))
@@ -348,21 +760,29 @@ def _formatar_quantidade(nome: str, qtd: float, unidade: str) -> str:
             return f"{int(round(duzias))} dúzias"
         return f"{qtd_int} unidades"
 
+    if unidade == "xicara":
+        qtd_fmt = int(qtd) if qtd == int(qtd) else qtd
+        return f"{qtd_fmt} xícaras" if qtd != 1 else "1 xícara"
+
+    if unidade == "fatia":
+        return f"{int(round(qtd))} fatias"
+
     if unidade == "pote":
         return f"{int(round(qtd))} potes"
 
-    if unidade == "colher":
-        if "azeite" in nome_lower:
-            ml = qtd * 15
-            return "1 litro" if ml >= 500 else "500ml"
-        return f"{int(qtd)} colheres"
+    if unidade == "lata":
+        return f"{int(round(qtd))} latas"
 
-    if unidade == "fatia":
-        return f"{int(qtd)} fatias"
+    if unidade == "sache":
+        return f"{int(round(qtd))} sachês"
 
-    if unidade == "ml":
-        if qtd >= 1000:
-            return f"{qtd/1000:.1f}L".replace(".0L", "L")
-        return f"{int(qtd)}ml"
+    if unidade == "caixa":
+        return f"{int(round(qtd))} caixas"
 
-    return f"{int(qtd)} {unidade}"
+    if unidade == "pacote":
+        return f"{int(round(qtd))} pacotes"
+
+    if unidade == "porcao":
+        return f"{int(round(qtd))} porções"
+
+    return f"{int(round(qtd))} {unidade}"

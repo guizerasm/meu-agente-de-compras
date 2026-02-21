@@ -167,10 +167,15 @@ async def receber_dieta(
 
         print(f"[DEBUG] Dieta OK! Retornando com {len(dieta['fixos'])} itens fixos\n")
 
+        mensagem = "Perfeito! Vamos conversar um pouco para ajustar sua lista 🙂"
+        if dieta.get("tem_estimativas"):
+            nomes = ", ".join(dieta.get("itens_estimados", [])[:5])
+            mensagem += f"\n\n⚠️ Notei que alguns alimentos não tinham quantidade definida ({nomes}). Usei porções padrão como referência — você pode ajustar depois!"
+
         return {
             "dieta": dieta,
             "escolhas_pendentes": escolhas_pendentes,
-            "mensagem": "Perfeito! Vamos conversar um pouco para ajustar sua lista 🙂"
+            "mensagem": mensagem
         }
     except Exception as e:
         print(f"[ERRO] Exceção ao processar dieta: {e}")
