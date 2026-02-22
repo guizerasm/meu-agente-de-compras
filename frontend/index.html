@@ -765,6 +765,8 @@
   let listaFinal = null;
   let fase = "tutorial";
   let tutorialShown = false;
+  let dietas = [];
+  let perguntaOutraPessoaFeita = false;
 
   function setStatus(text, type) {
     statusText.textContent = text;
@@ -1006,11 +1008,21 @@
   async function gerarListaAutomatica() {
     showTyping();
 
+    // Incluir dieta atual no array se ainda não estiver
+    if (dieta && dietas.indexOf(dieta) === -1) {
+      dietas.push(JSON.parse(JSON.stringify(dieta)));
+    }
+    const dietaFinal = mesclarDietas(dietas);
+
+    if (dietas.length > 1) {
+      addMessage("Gerando lista combinando " + dietas.length + " dietas...");
+    }
+
     try {
       const res = await fetch(API_URL + "/finalizar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dieta_final: dieta })
+        body: JSON.stringify({ dieta_final: dietaFinal })
       });
       const data = await res.json();
       hideTyping();
@@ -1037,9 +1049,9 @@
         addMessage("Lista atualizada! Quer ajustar mais alguma coisa?");
         mostrarOpcaoAjustar();
       } else {
-        // Primeira geracao
-        addMessage("Pronto! Sua lista de compras esta na lateral (desktop) ou acima (mobile). Pode baixar o PDF!");
-        mostrarOpcaoAjustar();
+        // Primeira geracao - perguntar se quer adicionar outra pessoa
+        addMessage("Pronto! Sua lista de compras esta na lateral (desktop) ou acima (mobile).");
+        perguntarOutraPessoa();
       }
 
       setStatus("Lista pronta!", "ready");
@@ -1050,6 +1062,95 @@
       addMessage("Erro ao gerar lista: " + e.message);
       setStatus("Erro", "");
     }
+  }
+
+  function perguntarOutraPessoa() {
+    if (perguntaOutraPessoaFeita) {
+      mostrarOpcaoAjustar();
+      return;
+    }
+    perguntaOutraPessoaFeita = true;
+
+    const row = document.createElement("div");
+    row.className = "msg-row bot";
+    row.id = "outra-pessoa-opcao";
+
+    const avatar = document.createElement("div");
+    avatar.className = "avatar";
+    avatar.textContent = "🤖";
+
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg";
+    msgDiv.innerHTML = `
+      <div style="margin-bottom:12px">Quer adicionar a dieta de <strong>outra pessoa</strong> antes de finalizar?</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="btnSimOutra" style="padding:10px 16px;background:var(--primary);color:white;border:none;border-radius:20px;font-size:13px;cursor:pointer;font-weight:600">Sim, adicionar</button>
+        <button id="btnNaoOutra" style="padding:10px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:20px;font-size:13px;cursor:pointer;font-weight:600">Nao, esta pronto!</button>
+      </div>
+    `;
+
+    row.appendChild(avatar);
+    row.appendChild(msgDiv);
+    chat.appendChild(row);
+    chat.scrollTop = chat.scrollHeight;
+
+    document.getElementById("btnSimOutra").onclick = function() {
+      // Salvar dieta atual (já foi adicionada ao array em gerarListaAutomatica)
+      const numPessoa = dietas.length;
+
+      // Desabilitar botões
+      document.getElementById("btnSimOutra").disabled = true;
+      document.getElementById("btnNaoOutra").disabled = true;
+
+      addMessage("Sim, quero adicionar outra dieta.", true);
+      addMessage("Dieta da pessoa " + numPessoa + " salva! Envie a proxima dieta (texto ou PDF).");
+
+      // Resetar para nova dieta
+      dieta = null;
+      historico = [];
+      fase = "inicial";
+      perguntaOutraPessoaFeita = false;
+      setStatus("Aguardando dieta", "");
+      input.placeholder = "Envie a dieta da proxima pessoa...";
+      input.focus();
+    };
+
+    document.getElementById("btnNaoOutra").onclick = function() {
+      document.getElementById("btnSimOutra").disabled = true;
+      document.getElementById("btnNaoOutra").disabled = true;
+
+      addMessage("Nao, pode finalizar!", true);
+      addMessage("Pode baixar o PDF e ajustar o que precisar!");
+      mostrarOpcaoAjustar();
+    };
+  }
+
+  function mesclarDietas(listaDietas) {
+    if (listaDietas.length <= 1) return listaDietas[0] || dieta;
+
+    const mesclada = {
+      refeicoes: {},
+      dias: listaDietas[0].dias || 1,
+      pessoas: 1,
+      alimentos_em_casa: []
+    };
+
+    listaDietas.forEach(function(d, idx) {
+      const refeicoes = d.refeicoes || {};
+      for (const ref in refeicoes) {
+        const chave = listaDietas.length > 1 ? ref + "_p" + (idx + 1) : ref;
+        mesclada.refeicoes[chave] = refeicoes[ref];
+      }
+      const emCasa = d.alimentos_em_casa || [];
+      emCasa.forEach(function(a) {
+        if (mesclada.alimentos_em_casa.indexOf(a) === -1) {
+          mesclada.alimentos_em_casa.push(a);
+        }
+      });
+      if (d.dias && d.dias < mesclada.dias) mesclada.dias = d.dias;
+    });
+
+    return mesclada;
   }
 
   function mostrarOpcaoAjustar() {
@@ -1127,6 +1228,8 @@
       dieta = null;
       historico = [];
       listaFinal = null;
+      dietas = [];
+      perguntaOutraPessoaFeita = false;
       enviarDietaInicial();
     } else {
       enviarMensagemChat();
