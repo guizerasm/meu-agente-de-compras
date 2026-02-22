@@ -455,6 +455,7 @@
   let historico = [];
   let listaFinal = null;
   let fase = "inicial"; // inicial | conversando | pronto
+  let dietas = []; // acumula dietas de múltiplas pessoas
 
   function setStatus(text, type = "default") {
     statusBadge.textContent = text;
@@ -558,7 +559,7 @@
         fase = "pronto";
         setStatus("Pronto!", "ready");
         addMessage(data.mensagem);
-        finalizarBtn.disabled = false;
+        perguntarOutraPessoa();
       }
     } catch (erro) {
       typingMsg.remove();
@@ -621,12 +622,106 @@
       if (data.pronto) {
         fase = "pronto";
         setStatus("Pronto!", "ready");
-        finalizarBtn.disabled = false;
-        addMessage("✅ Perfeito! Agora você pode gerar sua lista de compras.");
+        addMessage("✅ Perfeito! Sua dieta está pronta.");
+        perguntarOutraPessoa();
       }
     } catch (erro) {
       console.error("Erro ao verificar prontidão:", erro);
     }
+  }
+
+  let perguntaFeita = false;
+  function perguntarOutraPessoa() {
+    if (perguntaFeita) return;
+    perguntaFeita = true;
+    const msgDiv = document.createElement("div");
+    msgDiv.className = "msg-wrapper bot";
+
+    const avatar = document.createElement("div");
+    avatar.className = "msg-avatar";
+    avatar.textContent = "🤖";
+    msgDiv.appendChild(avatar);
+
+    const bubble = document.createElement("div");
+    bubble.className = "msg-bubble";
+    bubble.innerHTML = `
+      <p>Quer adicionar a dieta de <strong>outra pessoa</strong> antes de gerar a lista de compras?</p>
+      <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
+        <button id="btnSimDieta" class="success" style="padding: 8px 16px; flex: 1; min-width: 120px;">
+          ✚ Sim, adicionar
+        </button>
+        <button id="btnNaoDieta" class="secondary" style="padding: 8px 16px; flex: 1; min-width: 120px;">
+          Não, gerar lista
+        </button>
+      </div>
+    `;
+    msgDiv.appendChild(bubble);
+    chatBox.appendChild(msgDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    document.getElementById("btnSimDieta").onclick = () => {
+      // Salvar dieta atual
+      dietas.push(JSON.parse(JSON.stringify(dieta)));
+      const numPessoa = dietas.length;
+
+      // Desabilitar botões para evitar duplo clique
+      document.getElementById("btnSimDieta").disabled = true;
+      document.getElementById("btnNaoDieta").disabled = true;
+
+      showUserMessage("Sim, quero adicionar outra dieta.");
+      addMessage(`Dieta da pessoa ${numPessoa} salva! Envie a próxima dieta (texto ou PDF).`);
+
+      // Resetar para nova dieta
+      dieta = null;
+      historico = [];
+      fase = "inicial";
+      perguntaFeita = false;
+      setStatus("Aguardando dieta", "default");
+      finalizarBtn.disabled = true;
+      input.placeholder = "Envie a dieta da próxima pessoa...";
+      input.focus();
+    };
+
+    document.getElementById("btnNaoDieta").onclick = () => {
+      document.getElementById("btnSimDieta").disabled = true;
+      document.getElementById("btnNaoDieta").disabled = true;
+      showUserMessage("Não, pode gerar a lista.");
+      finalizarLista();
+    };
+
+    // Habilitar botão Finalizar como alternativa
+    finalizarBtn.disabled = false;
+  }
+
+  function mesclarDietas(listaDietas) {
+    if (listaDietas.length === 1) return listaDietas[0];
+
+    const mesclada = {
+      refeicoes: {},
+      dias: listaDietas[0].dias || 1,
+      pessoas: 1,
+      alimentos_em_casa: []
+    };
+
+    listaDietas.forEach((d, idx) => {
+      const refeicoes = d.refeicoes || {};
+      for (const [ref, itens] of Object.entries(refeicoes)) {
+        // Sufixo para não sobrescrever refeições de pessoas diferentes
+        const chave = listaDietas.length > 1 ? `${ref}_p${idx + 1}` : ref;
+        mesclada.refeicoes[chave] = itens;
+      }
+      // Unir alimentos em casa
+      const emCasa = d.alimentos_em_casa || [];
+      emCasa.forEach(a => {
+        if (!mesclada.alimentos_em_casa.includes(a)) {
+          mesclada.alimentos_em_casa.push(a);
+        }
+      });
+      // Usar menor dias (se uma é diária e outra semanal)
+      if (d.dias && d.dias < mesclada.dias) mesclada.dias = d.dias;
+    });
+
+    return mesclada;
   }
 
   async function finalizarLista() {
@@ -635,7 +730,18 @@
       return;
     }
 
-    showUserMessage("Quero finalizar a lista de compras.");
+    // Incluir dieta atual no array
+    if (dieta && !dietas.includes(dieta)) {
+      dietas.push(JSON.parse(JSON.stringify(dieta)));
+    }
+
+    const dietaFinal = mesclarDietas(dietas);
+    const numPessoas = dietas.length;
+
+    if (numPessoas > 1) {
+      addMessage(`Gerando lista de compras combinando ${numPessoas} dietas...`);
+    }
+
     setStatus("Gerando lista...", "loading");
     const typingMsg = addMessage("", false, true);
 
@@ -643,7 +749,7 @@
       const res = await fetch(`${API_URL}/finalizar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dieta_final: dieta })
+        body: JSON.stringify({ dieta_final: dietaFinal })
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
