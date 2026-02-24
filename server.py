@@ -97,6 +97,7 @@ class VerificarProntidaoRequest(BaseModel):
 
 
 @app.get("/health")
+@app.head("/health")
 async def health_check():
     """Health check endpoint para Render e monitoramento"""
     return {
@@ -108,6 +109,7 @@ async def health_check():
 
 
 @app.get("/")
+@app.head("/")
 async def root():
     """Serve a página principal do frontend"""
     index_file = os.path.join(os.path.dirname(__file__), "frontend", "index.html")
