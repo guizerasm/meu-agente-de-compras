@@ -544,14 +544,18 @@ def gerar_lista_compras(dieta: dict) -> list:
             # Para dietas semanais, multiplicar pela frequência (vezes/semana)
             vezes = item.get("vezes", 1)
 
-            # Agregar (normalizar nome para agrupar variações)
-            # Incluir unidade na chave para NÃO misturar g com unidade
-            # (ex: "banana|g" separado de "banana|unidade")
+            # Normalizar nome e converter cozido → cru
             nome_norm = _normalizar_nome_item(nome_item)
+            qtd_num = _converter_cozido_para_cru(nome_norm, qtd_num, unidade)
+
+            # Agregar (incluir unidade na chave para NÃO misturar g com unidade)
             chave = f"{nome_norm}|{unidade}"
-            # Manter o nome mais curto como display name
-            if "nome" not in agregado[chave] or len(nome_item) < len(agregado[chave]["nome"]):
-                agregado[chave]["nome"] = nome_item
+            # Manter o nome mais curto como display name, removendo termos de preparo
+            nome_display = re.sub(r'\s*\(?(cozid[oa]|grelh?ad[oa]|refogad[oa]|assad[oa]|desfi?ad[oa])\)?', '', nome_item, flags=re.IGNORECASE).strip()
+            if not nome_display:
+                nome_display = nome_item
+            if "nome" not in agregado[chave] or len(nome_display) < len(agregado[chave]["nome"]):
+                agregado[chave]["nome"] = nome_display
             agregado[chave]["qtd"] += qtd_num * vezes
             agregado[chave]["unidade"] = unidade
             agregado[chave]["refeicoes"].add(nome_refeicao)
@@ -749,6 +753,50 @@ PESO_COLHER_SOPA = {
 
 # Alimentos que são líquidos (colher = ml)
 LIQUIDOS = ["azeite", "óleo", "oleo", "mel", "vinagre", "molho", "leite", "suco"]
+
+# Fator de conversão: cozido → cru
+# Dietas indicam peso COZIDO, mas compramos CRU
+# quantidade_cru = quantidade_cozida × fator
+FATOR_COZIDO_PARA_CRU = {
+    # Grãos e cereais (absorvem muita água ao cozinhar)
+    "arroz": 0.33,            # 100g cru → ~300g cozido
+    "arroz integral": 0.40,   # 100g cru → ~250g cozido
+    "macarrão": 0.45,         # 100g cru → ~220g cozido
+    "macarrão integral": 0.45,
+    "feijão": 0.40,           # 100g cru → ~250g cozido
+    "feijao": 0.40,
+    "lentilha": 0.40,
+    "grão de bico": 0.40,
+    "quinoa": 0.33,
+    "aveia": 0.50,            # 100g cru → ~200g cozido
+    # Proteínas (perdem água ao cozinhar)
+    "frango": 0.75,           # 100g cru → ~75g cozido (perde ~25%)
+    "carne": 0.75,
+    "peixe": 0.80,            # perde ~20%
+    "tilápia": 0.80,
+    # Tubérculos
+    "batata doce": 0.85,      # perde pouca água
+    "batata": 0.85,
+    "mandioca": 0.85,
+    # Vegetais (perdem água, mas compramos crus ~mesmo peso)
+    "legumes": 0.90,
+    "vegetais": 0.90,
+    "brócolis": 0.90,
+    "brocolis": 0.90,
+}
+
+
+def _converter_cozido_para_cru(nome_normalizado: str, qtd: float, unidade: str) -> float:
+    """Converte quantidade de alimento cozido para cru (peso de compra).
+    Só aplica para gramas — unidades, fatias, potes etc. já são de compra."""
+    if unidade not in ("g",):
+        return qtd
+    fator = FATOR_COZIDO_PARA_CRU.get(nome_normalizado)
+    if fator and fator != 1.0:
+        qtd_cru = qtd * fator
+        print(f"    [CONV] {nome_normalizado}: {qtd:.0f}g cozido → {qtd_cru:.0f}g cru (×{fator})")
+        return qtd_cru
+    return qtd
 
 
 def _formatar_quantidade(nome: str, qtd: float, unidade: str) -> str:
