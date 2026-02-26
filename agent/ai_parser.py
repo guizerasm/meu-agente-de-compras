@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import math
 from collections import defaultdict
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -799,49 +800,73 @@ def _converter_cozido_para_cru(nome_normalizado: str, qtd: float, unidade: str) 
     return qtd
 
 
+def _arredondar_embalagem(qtd_g: float) -> str:
+    """Arredonda gramas para embalagens comuns de supermercado.
+    Ex: 924g → '1kg', 2200g → '2.5kg', 350g → '500g'."""
+    # Embalagens comuns em gramas
+    embalagens = [100, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 2500, 3000, 4000, 5000]
+    # Arredondar para cima até a embalagem mais próxima
+    for emb in embalagens:
+        if qtd_g <= emb:
+            if emb >= 1000:
+                kg = emb / 1000
+                return f"{kg:.1f}kg".replace(".0kg", "kg")
+            return f"{emb}g"
+    # Acima de 5kg: arredondar para cima em incrementos de 1kg
+    kg = math.ceil(qtd_g / 1000)
+    return f"{kg}kg"
+
+
+def _arredondar_embalagem_ml(qtd_ml: float) -> str:
+    """Arredonda ml para embalagens comuns de supermercado."""
+    embalagens = [100, 200, 250, 300, 500, 750, 1000, 1500, 2000, 3000, 5000]
+    for emb in embalagens:
+        if qtd_ml <= emb:
+            if emb >= 1000:
+                return f"{emb/1000:.1f}L".replace(".0L", "L")
+            return f"{emb}ml"
+    litros = math.ceil(qtd_ml / 1000)
+    return f"{litros}L"
+
+
 def _formatar_quantidade(nome: str, qtd: float, unidade: str) -> str:
-    """Formata quantidade para exibição."""
+    """Formata quantidade para exibição, arredondando para embalagens de supermercado."""
     nome_lower = nome.lower()
 
     if unidade == "g":
-        if qtd >= 1000:
-            kg = qtd / 1000
-            return f"{kg:.1f}kg".replace(".0kg", "kg")
-        return f"{int(qtd)}g"
+        return _arredondar_embalagem(qtd)
 
     if unidade == "ml":
-        if qtd >= 1000:
-            return f"{qtd/1000:.1f}L".replace(".0L", "L")
-        return f"{int(qtd)}ml"
+        return _arredondar_embalagem_ml(qtd)
 
     if unidade in ("colher_sopa", "colher_cha"):
         ml_por_colher = 15 if unidade == "colher_sopa" else 5
         # Líquidos → converter para ml
         if any(liq in nome_lower for liq in LIQUIDOS):
             ml_total = qtd * ml_por_colher
-            if ml_total >= 1000:
-                return f"{ml_total/1000:.1f}L".replace(".0L", "L")
-            return f"{int(ml_total)}ml"
+            return _arredondar_embalagem_ml(ml_total)
         # Sólidos → converter para gramas
         for alimento, peso in PESO_COLHER_SOPA.items():
             if alimento in nome_lower:
                 gramas = qtd * peso
-                if gramas >= 1000:
-                    return f"{gramas/1000:.1f}kg".replace(".0kg", "kg")
-                return f"{int(gramas)}g"
+                return _arredondar_embalagem(gramas)
         # Fallback sólido: 1 colher sopa ≈ 20g
         gramas = qtd * 20
-        if gramas >= 1000:
-            return f"{gramas/1000:.1f}kg".replace(".0kg", "kg")
-        return f"{int(gramas)}g"
+        return _arredondar_embalagem(gramas)
 
     if unidade == "unidade":
         qtd_int = int(round(qtd))
         if "ovo" in nome_lower:
-            duzias = qtd_int / 12
-            if duzias <= 1:
+            # Arredondar para múltiplos de 6 (meia dúzia) ou 12 (dúzia)
+            if qtd_int <= 6:
+                return "6 unidades (meia dúzia)"
+            elif qtd_int <= 12:
                 return "1 dúzia"
-            return f"{int(round(duzias))} dúzias"
+            elif qtd_int <= 18:
+                return "1 dúzia e meia"
+            else:
+                duzias = math.ceil(qtd_int / 12)
+                return f"{duzias} dúzias ({duzias * 12} unidades)"
         return f"{qtd_int} unidades"
 
     if unidade == "xicara":
