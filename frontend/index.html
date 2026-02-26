@@ -877,7 +877,7 @@
     listaDesktop.classList.add("visible");
     listaMobile.classList.add("visible");
     emptyState.style.display = "none";
-    baixarPdfDesktop.disabled = false;
+    // PDF fica desabilitado até confirmar que não tem mais receitas
   }
 
   async function enviarDietaInicial() {
@@ -1082,10 +1082,10 @@
     const msgDiv = document.createElement("div");
     msgDiv.className = "msg";
     msgDiv.innerHTML = `
-      <div style="margin-bottom:12px">Quer adicionar a dieta de <strong>outra pessoa</strong> antes de finalizar?</div>
+      <div style="margin-bottom:12px">Tem <strong>outra dieta</strong> para adicionar antes de gerar o PDF?</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button id="btnSimOutra" style="padding:10px 16px;background:var(--primary);color:white;border:none;border-radius:20px;font-size:13px;cursor:pointer;font-weight:600">Sim, adicionar</button>
-        <button id="btnNaoOutra" style="padding:10px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:20px;font-size:13px;cursor:pointer;font-weight:600">Nao, esta pronto!</button>
+        <button id="btnSimOutra" style="padding:10px 16px;background:var(--primary);color:white;border:none;border-radius:20px;font-size:13px;cursor:pointer;font-weight:600">Sim, tenho outra</button>
+        <button id="btnNaoOutra" style="padding:10px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:20px;font-size:13px;cursor:pointer;font-weight:600">Nao, gerar PDF</button>
       </div>
     `;
 
@@ -1102,8 +1102,8 @@
       document.getElementById("btnSimOutra").disabled = true;
       document.getElementById("btnNaoOutra").disabled = true;
 
-      addMessage("Sim, quero adicionar outra dieta.", true);
-      addMessage("Dieta da pessoa " + numPessoa + " salva! Envie a proxima dieta (texto ou PDF).");
+      addMessage("Sim, tenho outra dieta.", true);
+      addMessage("Dieta " + numPessoa + " salva! Envie a proxima dieta (texto ou PDF).");
 
       // Resetar para nova dieta
       dieta = null;
@@ -1111,7 +1111,7 @@
       fase = "inicial";
       perguntaOutraPessoaFeita = false;
       setStatus("Aguardando dieta", "");
-      input.placeholder = "Envie a dieta da proxima pessoa...";
+      input.placeholder = "Envie a proxima dieta (texto ou PDF)...";
       input.focus();
     };
 
@@ -1119,9 +1119,15 @@
       document.getElementById("btnSimOutra").disabled = true;
       document.getElementById("btnNaoOutra").disabled = true;
 
-      addMessage("Nao, pode finalizar!", true);
-      addMessage("Pode baixar o PDF e ajustar o que precisar!");
-      mostrarOpcaoAjustar();
+      addMessage("Nao, pode gerar o PDF!", true);
+
+      // Habilitar botão de PDF e baixar automaticamente
+      baixarPdfDesktop.disabled = false;
+      addMessage("Gerando seu PDF...");
+      baixarPdf().then(function() {
+        addMessage("PDF gerado! Quer ajustar alguma coisa na lista?");
+        mostrarOpcaoAjustar();
+      });
     };
   }
 
